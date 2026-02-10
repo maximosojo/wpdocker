@@ -1,0 +1,28 @@
+.DS_Store
+themes/*
+!themes/.gitignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Backups
+backups/
+*.sql
+*.sql.gz
+*.tar.gz
+
+# SSL Certificates
+nginx/certs/*
+!nginx/certs/.gitkeep
+
+# WordPress uploads
+wordpress/
+
+# Nginx config generado por setup.sh (el código fuente es wordpress.conf.template)
+nginx/conf.d/wordpress.conf
+
+# Logs
+*.log
+logs/

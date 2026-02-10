@@ -1,0 +1,91 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wordpress_db}
+      MYSQL_USER: ${MYSQL_USER:-wordpress_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Define MYSQL_PASSWORD en .env}
+    volumes:
+      - wpdocker_db_data:/var/lib/mysql
+      - ./backups/db:/backups
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=128M --max-connections=50 --tmp-table-size=16M --max-heap-table-size=16M
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - wpdocker-wordpress-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  wordpress:
+    depends_on:
+      db:
+        condition: service_healthy
+    image: wordpress:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress_user}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:?Define MYSQL_PASSWORD en .env}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress_db}
+      WORDPRESS_DEBUG: ${WORDPRESS_DEBUG:-false}
+    volumes:
+      - wpdocker_wp_data:/var/www/html
+      - ./themes:/var/www/html/wp-content/themes
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./backups/wp:/backups
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.7'
+          memory: 512M
+        reservations:
+          cpus: '0.3'
+          memory: 256M
+    networks:
+      - wpdocker-wordpress-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_nginx
+    restart: always
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - wordpress
+    networks:
+      - wpdocker-wordpress-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.7'
+          memory: 512M
+        reservations:
+          cpus: '0.3'
+          memory: 256M
+
+volumes:
+  wpdocker_db_data:
+  wpdocker_wp_data:
+
+networks:
+  wpdocker-wordpress-network:
+    driver: bridge

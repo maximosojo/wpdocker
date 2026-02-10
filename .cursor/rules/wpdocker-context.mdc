@@ -1,0 +1,10 @@
+---
+description: Contexto y reglas del proyecto WordPress Docker (wpdocker)
+alwaysApply: true
+---
+
+# Proyecto wpdocker — Contexto para IA
+
+- **Contexto principal:** Lee y aplica el contenido de `.cursor/AI-CONTEXT.md` para entender la estructura, servicios, scripts y convenciones del proyecto.
+- **Al cambiar el proyecto:** Actualiza `.cursor/AI-CONTEXT.md` cuando modifiques docker-compose, servicios, nombres de contenedores, scripts, nginx, temas o prácticas del equipo.
+- **Reglas y buenas prácticas:** Están definidas en las secciones 8 y 9 de `AI-CONTEXT.md`; síguelas al proponer o editar código (Docker, Bash, Nginx, PHP/WordPress, seguridad).
