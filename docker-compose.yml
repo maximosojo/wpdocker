@@ -11,7 +11,7 @@ services:
       - wpdocker_db_data:/var/lib/mysql
       - ./backups/db:/backups
     restart: always
-    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=128M --max-connections=50 --tmp-table-size=16M --max-heap-table-size=16M
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-168M} --max-connections=${MYSQL_MAX_CONNECTIONS:-30} --tmp-table-size=${MYSQL_TMP_TABLE_SIZE:-16M} --max-heap-table-size=${MYSQL_MAX_HEAP_TABLE_SIZE:-16M} --innodb-log-file-size=48M --innodb-flush-log-at-trx-commit=2 --innodb-flush-method=O_DIRECT
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost || exit 1"]
       interval: 10s
@@ -23,11 +23,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${DOCKER_MYSQL_CPU_LIMIT:-0.7}'
+          memory: ${DOCKER_MYSQL_MEMORY_LIMIT:-240M}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${DOCKER_MYSQL_CPU_RESERVE:-0.3}'
+          memory: ${DOCKER_MYSQL_MEMORY_RESERVE:-120M}
 
   wordpress:
     depends_on:
@@ -45,16 +45,17 @@ services:
       - wpdocker_wp_data:/var/www/html
       - ./themes:/var/www/html/wp-content/themes
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./php-config/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini
       - ./backups/wp:/backups
     restart: always
     deploy:
       resources:
         limits:
-          cpus: '0.7'
-          memory: 512M
+          cpus: '${DOCKER_WP_CPU_LIMIT:-0.7}'
+          memory: ${DOCKER_WP_MEMORY_LIMIT:-210M}
         reservations:
-          cpus: '0.3'
-          memory: 256M
+          cpus: '${DOCKER_WP_CPU_RESERVE:-0.3}'
+          memory: ${DOCKER_WP_MEMORY_RESERVE:-105M}
     networks:
       - wpdocker-wordpress-network
 
@@ -76,11 +77,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.7'
-          memory: 512M
+          cpus: '${DOCKER_NGINX_CPU_LIMIT:-0.4}'
+          memory: ${DOCKER_NGINX_MEMORY_LIMIT:-90M}
         reservations:
-          cpus: '0.3'
-          memory: 256M
+          cpus: '${DOCKER_NGINX_CPU_RESERVE:-0.2}'
+          memory: ${DOCKER_NGINX_MEMORY_RESERVE:-45M}
 
 volumes:
   wpdocker_db_data:

@@ -8,6 +8,7 @@
 
 - **Qué es:** Stack WordPress en Docker con Nginx como proxy reverso, MySQL 8, scripts de backup/restore y tema hijo Astra.
 - **Objetivo:** Despliegue en servidores vacíos con mínima configuración: un solo `.env` y `./scripts/setup.sh` + `docker-compose up -d`. Todo el código es genérico y reutilizable.
+- **Optimización:** Detecta recursos del sistema (CPU/RAM) y ajusta límites dinámicamente. Optimizado para servidores pequeños (2 cores, 1GB RAM) para evitar errores 503.
 - **Ruta del proyecto:** workspace raíz = `wpdocker` (donde está `docker-compose.yml`).
 
 ---
@@ -31,18 +32,22 @@ wpdocker/
 ├── .env                     # Configuración por entorno (no versionado; obligatorio)
 ├── docker-compose.yml       # Servicios: db, wordpress, nginx
 ├── uploads.ini              # PHP: upload_max_filesize, memory_limit, etc. (montado en wordpress)
+├── php-config/
+│   └── opcache.ini          # OPcache optimizado para recursos limitados
 ├── backups/                 # No versionado; generado por scripts
 │   ├── db/                  # .sql.gz por backup
 │   ├── wp/                  # .tar.gz por backup
 │   └── *.info               # Metadatos por backup
 ├── nginx/
-│   ├── nginx.conf           # Incluye conf.d
+│   ├── nginx.conf.template  # Plantilla con ${NGINX_WORKER_PROCESSES} (versionada)
+│   ├── nginx.conf           # Generado por setup.sh (no versionado)
 │   ├── conf.d/
 │   │   ├── wordpress.conf.template  # Plantilla con ${DOMAIN} (versionada)
 │   │   └── wordpress.conf   # Generado por setup.sh (no versionado; en .gitignore)
 │   └── certs/               # SSL (no versionado salvo .gitkeep)
 ├── scripts/
-│   ├── setup.sh             # Genera wordpress.conf desde .env; valida DOMAIN y contraseñas
+│   ├── detect-resources.sh  # Detecta CPU/RAM y calcula límites dinámicos recomendados
+│   ├── setup.sh             # Genera nginx.conf y wordpress.conf desde .env; detecta recursos
 │   ├── backup.sh            # Backup DB + WP; carga .env y usa COMPOSE_PROJECT_NAME para nombres
 │   └── restore.sh           # Restore DB + WP; carga .env; contenedor temporal para archivos
 └── themes/
@@ -58,17 +63,18 @@ wpdocker/
 
 Los nombres de contenedores dependen de `COMPOSE_PROJECT_NAME` en `.env` (default: `wpdocker`):
 
-- **db:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_mysql` — MySQL 8, healthcheck, límites CPU/RAM.
-- **wordpress:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app` — Depende de `db` healthy; recibe proxy desde nginx.
-- **nginx:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_nginx` — Puertos `HTTP_PORT`, `HTTPS_PORT` desde `.env`.
+- **db:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_mysql` — MySQL 8, healthcheck, límites CPU/RAM dinámicos desde `.env` (`DOCKER_MYSQL_*`). Optimizaciones: `innodb_buffer_pool_size`, `max_connections`, `tmp_table_size` desde `.env`.
+- **wordpress:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app` — Depende de `db` healthy; recibe proxy desde nginx. Límites CPU/RAM desde `.env` (`DOCKER_WP_*`). PHP con OPcache y `memory_limit` optimizado.
+- **nginx:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_nginx` — Puertos `HTTP_PORT`, `HTTPS_PORT` desde `.env`. Límites CPU/RAM desde `.env` (`DOCKER_NGINX_*`). Workers y conexiones desde `.env` (`NGINX_WORKER_*`).
 
-**Obligatorios en .env:** `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` (compose falla si faltan). `DOMAIN` obligatorio para `setup.sh`. Resto con defaults en `docker-compose.yml` y `.env.example`.
+**Obligatorios en .env:** `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` (compose falla si faltan). `DOMAIN` obligatorio para `setup.sh`. Resto con defaults optimizados para servidor pequeño (2 cores, 1GB RAM) en `docker-compose.yml` y `.env.example`.
 
 ---
 
 ## 5. Scripts
 
-- **setup.sh:** Ejecutar antes del primer `docker-compose up -d`. Crea `.env` desde `.env.example` si no existe (y sale pidiendo editarlo). Valida `DOMAIN`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`. Genera `nginx/conf.d/wordpress.conf` desde la plantilla con `envsubst '$DOMAIN'` (o `sed` si no hay envsubst). Crea `backups/db` y `backups/wp`.
+- **detect-resources.sh:** Detecta CPU (cores) y RAM total del sistema. Calcula límites recomendados para Docker (`DOCKER_*`), MySQL (`MYSQL_*`), PHP (`PHP_*`) y Nginx (`NGINX_*`) según recursos disponibles. Muestra valores para copiar a `.env`. Optimizado para servidores pequeños (<2GB RAM: más conservador).
+- **setup.sh:** Ejecutar antes del primer `docker-compose up -d`. Crea `.env` desde `.env.example` si no existe (y sale pidiendo editarlo). Valida `DOMAIN`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`. Si no hay variables `DOCKER_*` en `.env`, ejecuta `detect-resources.sh` y muestra recomendaciones. Genera `nginx/nginx.conf` y `nginx/conf.d/wordpress.conf` desde plantillas con `envsubst` (o `sed`). Crea `backups/db` y `backups/wp`. Muestra resumen de recursos configurados.
 - **backup.sh:** `./scripts/backup.sh [nombre]` — Carga `.env`, usa `COMPOSE_PROJECT_NAME` para nombres de contenedores y `MYSQL_*` para mysqldump. Escribe en `backups/db/`, `backups/wp/`, `backups/<nombre>.info`.
 - **restore.sh:** `./scripts/restore.sh <nombre>` — Carga `.env`, restaura DB vía compose, para wordpress, usa contenedor temporal `wordpress:latest` con volumen `wpdocker_wp_data` para extraer el tar, reinicia wordpress.
 
@@ -78,15 +84,18 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
 
 ## 6. Nginx
 
-- **Generado:** `nginx/conf.d/wordpress.conf` se genera con `./scripts/setup.sh` a partir de `wordpress.conf.template` y la variable `DOMAIN` del `.env`. No se versiona (está en `.gitignore`).
-- **Plantilla:** `wordpress.conf.template` usa `${DOMAIN}` en `server_name`; SSL y acme-challenge están comentados; para HTTPS hay que descomentar el bloque en la plantilla (o en el conf generado) y poner certificados en `nginx/certs/`.
+- **Generado:** `nginx/nginx.conf` y `nginx/conf.d/wordpress.conf` se generan con `./scripts/setup.sh` desde plantillas. No se versionan (están en `.gitignore`).
+- **Plantillas:** 
+  - `nginx/nginx.conf.template` usa `${NGINX_WORKER_PROCESSES}` y `${NGINX_WORKER_CONNECTIONS}`. Optimizado: buffers pequeños (16k), timeouts reducidos (12-15s), compresión gzip, cache de archivos estáticos, keepalive en upstream.
+  - `wordpress.conf.template` usa `${DOMAIN}` en `server_name`; buffers de proxy pequeños (16k-64k), timeouts reducidos (30s), HTTP/1.1 keepalive. SSL y acme-challenge están comentados.
 - Certificados en `nginx/certs/` (no versionados).
 
 ---
 
 ## 7. PHP / WordPress
 
-- **uploads.ini:** `upload_max_filesize` y `post_max_size` 128M, `memory_limit` 512M, `max_execution_time` y `max_input_time` 300, `max_input_vars` 5000.
+- **uploads.ini:** Optimizado para recursos limitados: `upload_max_filesize` y `post_max_size` 64M, `memory_limit` 128M (ajustable con `PHP_MEMORY_LIMIT` en `.env`), `max_execution_time` y `max_input_time` 300, `max_input_vars` 5000, `realpath_cache_size` 2M.
+- **opcache.ini:** OPcache habilitado con 64M de memoria, `max_accelerated_files` 10000, `revalidate_freq` 60s, `fast_shutdown` activado. Optimizado para reducir uso de memoria.
 - Tema hijo: **Astra Child** en `themes/astra-child` (style.css + functions.php encola estilos con dependencia de Astra).
 
 ---
@@ -97,6 +106,8 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
   - Nombres de contenedores desde `COMPOSE_PROJECT_NAME` en `.env`; no hardcodear nombres en scripts.
   - Mantener `depends_on` con `condition: service_healthy` para `wordpress` respecto a `db`.
   - No dar valores por defecto a secretos en compose (`MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`); usar `:?` para fallar si faltan.
+  - Recursos dinámicos desde `.env`: `DOCKER_*_CPU_LIMIT`, `DOCKER_*_MEMORY_LIMIT`, `DOCKER_*_CPU_RESERVE`, `DOCKER_*_MEMORY_RESERVE`. Valores por defecto optimizados para servidor pequeño (2 cores, 1GB RAM).
+  - MySQL: parámetros desde `.env`: `MYSQL_INNODB_BUFFER_POOL_SIZE`, `MYSQL_MAX_CONNECTIONS`, `MYSQL_TMP_TABLE_SIZE`, `MYSQL_MAX_HEAP_TABLE_SIZE`. Optimizaciones adicionales: `innodb-flush-log-at-trx-commit=2`, `innodb-flush-method=O_DIRECT`.
 
 - **Scripts (Bash)**
   - Ejecutar desde raíz del proyecto; cargar `.env` con `set -a; . ./.env; set +a` (o validar que exista).
@@ -105,8 +116,9 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
   - Mantener compatibilidad macOS/Linux (p. ej. envsubst opcional con fallback sed en setup.sh).
 
 - **Nginx**
-  - El dominio y la config activa salen de la plantilla y de `DOMAIN` en `.env`; no editar `wordpress.conf` a mano si se quiere despliegue genérico.
-  - Cambios de estructura HTTPS o server_name hacerlos en `wordpress.conf.template` y volver a ejecutar `setup.sh`.
+  - El dominio y la config activa salen de las plantillas y de variables en `.env` (`DOMAIN`, `NGINX_WORKER_PROCESSES`, `NGINX_WORKER_CONNECTIONS`); no editar archivos `.conf` generados a mano si se quiere despliegue genérico.
+  - Cambios de estructura HTTPS, server_name, workers o buffers hacerlos en las plantillas (`nginx.conf.template`, `wordpress.conf.template`) y volver a ejecutar `setup.sh`.
+  - Optimizaciones aplicadas: buffers pequeños (16k-64k), timeouts reducidos (12-30s), compresión gzip, cache de archivos estáticos, keepalive en upstream. Ajustar según recursos del servidor.
 
 - **WordPress / temas**
   - Cambios en tema hijo solo en `themes/astra-child/`; no modificar temas en el volumen de WordPress.
@@ -122,9 +134,10 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
 
 1. **Backups:** Hacer backup antes de actualizar WordPress/plugins o antes de restauraciones.
 2. **Migraciones:** Backup con nombre descriptivo → copiar proyecto y `backups/` → en destino: crear `.env` (mismo dominio/credenciales o los del nuevo sitio) → `./scripts/setup.sh` → `docker-compose up -d` → si aplica, `./scripts/restore.sh <nombre>`.
-3. **Dominio:** Definir `DOMAIN` en `.env` y ejecutar `./scripts/setup.sh`; no editar `wordpress.conf` a mano para no romper el flujo genérico.
-4. **Debug:** En producción `WORDPRESS_DEBUG=false` en `.env`; en desarrollo se puede poner `true`.
-5. **Mantenimiento de este archivo:** Al añadir servicios, volúmenes, scripts, variables en `.env.example` o convenciones, actualizar las secciones correspondientes.
+3. **Dominio:** Definir `DOMAIN` en `.env` y ejecutar `./scripts/setup.sh`; no editar archivos `.conf` generados a mano para no romper el flujo genérico.
+4. **Optimización de recursos:** En servidores nuevos, ejecutar `./scripts/detect-resources.sh` y copiar valores recomendados a `.env`. Si hay errores 503 o el servidor se cuelga, reducir límites de memoria (`DOCKER_*_MEMORY_LIMIT`) y CPU (`DOCKER_*_CPU_LIMIT`). Valores por defecto optimizados para 2 cores / 1GB RAM.
+5. **Debug:** En producción `WORDPRESS_DEBUG=false` en `.env`; en desarrollo se puede poner `true`.
+6. **Mantenimiento de este archivo:** Al añadir servicios, volúmenes, scripts, variables en `.env.example` o convenciones, actualizar las secciones correspondientes.
 
 ---
 

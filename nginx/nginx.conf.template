@@ -1,8 +1,8 @@
-# Nginx configuration - generado automáticamente por setup.sh
-# Para modificar, edita nginx/nginx.conf.template y ejecuta setup.sh de nuevo
+# Nginx configuration template - optimizado para servidores con recursos limitados
+# Variables: NGINX_WORKER_PROCESSES, NGINX_WORKER_CONNECTIONS
 
 events {
-    worker_connections 512;
+    worker_connections ${NGINX_WORKER_CONNECTIONS:-512};
     use epoll;
     multi_accept on;
 }
@@ -11,8 +11,8 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
-    # Workers dinámicos según CPU (ajustar en .env: NGINX_WORKER_PROCESSES)
-    worker_processes 2;
+    # Workers dinámicos según CPU
+    worker_processes ${NGINX_WORKER_PROCESSES:-2};
     
     # Logging optimizado
     access_log off;

@@ -5,6 +5,8 @@ Proyecto WordPress listo para desplegar en **servidores vacíos** con mínima co
 ## 🚀 Características
 
 - ✅ **Despliegue genérico:** un solo `.env` define dominio, BD, puertos y debug
+- ✅ **Optimización automática:** detecta recursos del servidor y ajusta límites de CPU/RAM dinámicamente
+- ✅ **Servidores pequeños:** optimizado para 2 cores / 1GB RAM (evita errores 503)
 - ✅ Nginx generado desde plantilla (no editar `wordpress.conf` a mano)
 - ✅ Backup y restauración que usan el mismo `.env`
 - ✅ Configuración SSL lista para Let's Encrypt
@@ -59,6 +61,70 @@ Copia `.env.example` a `.env` y rellena al menos:
 | `WORDPRESS_DEBUG` | No | `true`/`false` (default: `false`) |
 
 El resto está documentado en `.env.example`. **No subas `.env` a Git.**
+
+## ⚡ Optimización de recursos
+
+El proyecto está optimizado para servidores con recursos limitados (2 cores, 1GB RAM). Los recursos se detectan automáticamente y se ajustan dinámicamente.
+
+### Detección automática
+
+Al ejecutar `./scripts/setup.sh`, se detectan los recursos del sistema y se muestran valores recomendados. Si no defines variables `DOCKER_*` en `.env`, se usan valores por defecto optimizados para servidor pequeño.
+
+### Ajustar recursos manualmente
+
+Para servidores con más recursos, ejecuta:
+
+```bash
+./scripts/detect-resources.sh
+```
+
+Esto muestra valores recomendados según tu servidor. Copia los valores `DOCKER_*`, `MYSQL_*`, `PHP_*` y `NGINX_*` a tu `.env`.
+
+### Variables de recursos en .env
+
+| Variable | Descripción | Default (servidor pequeño) |
+|----------|-------------|----------------------------|
+| `DOCKER_MYSQL_CPU_LIMIT` | Límite de CPU para MySQL | `0.7` |
+| `DOCKER_MYSQL_MEMORY_LIMIT` | Límite de RAM para MySQL | `240M` |
+| `DOCKER_WP_CPU_LIMIT` | Límite de CPU para WordPress | `0.7` |
+| `DOCKER_WP_MEMORY_LIMIT` | Límite de RAM para WordPress | `210M` |
+| `DOCKER_NGINX_CPU_LIMIT` | Límite de CPU para Nginx | `0.4` |
+| `DOCKER_NGINX_MEMORY_LIMIT` | Límite de RAM para Nginx | `90M` |
+| `MYSQL_INNODB_BUFFER_POOL_SIZE` | Buffer pool de InnoDB | `168M` |
+| `MYSQL_MAX_CONNECTIONS` | Conexiones máximas MySQL | `30` |
+| `PHP_MEMORY_LIMIT` | Memoria PHP | `128M` |
+| `NGINX_WORKER_PROCESSES` | Workers de Nginx | `2` |
+
+### Optimizaciones aplicadas
+
+- **MySQL:** Buffer pool ajustado según RAM, conexiones limitadas, flush optimizado
+- **PHP:** OPcache habilitado, memory_limit reducido, realpath cache optimizado
+- **Nginx:** Workers según CPU, buffers pequeños, timeouts reducidos, compresión gzip
+- **Docker:** Límites de CPU y RAM por contenedor para evitar OOM
+
+### Solución de problemas de rendimiento
+
+Si experimentas errores 503 o el servidor se cuelga:
+
+1. **Verifica recursos disponibles:**
+   ```bash
+   free -h
+   nproc
+   ```
+
+2. **Ejecuta detección de recursos:**
+   ```bash
+   ./scripts/detect-resources.sh
+   ```
+
+3. **Ajusta valores en `.env`** según las recomendaciones
+
+4. **Reinicia servicios:**
+   ```bash
+   docker-compose down
+   ./scripts/setup.sh
+   docker-compose up -d
+   ```
 
 ### Nginx
 

@@ -1,5 +1,6 @@
 #!/bin/bash
 # Genera la configuración de Nginx desde .env y prepara directorios.
+# Detecta recursos del sistema y sugiere valores óptimos si no están en .env
 # Ejecutar desde la raíz del proyecto. En servidores nuevos: crear .env → ./scripts/setup.sh → docker-compose up -d
 
 set -e
@@ -7,6 +8,7 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,7 +55,42 @@ fi
 if [ "$MYSQL_PASSWORD" = "$MYSQL_ROOT_PASSWORD" ] && [ -n "$MYSQL_PASSWORD" ]; then
   echo -e "${YELLOW}Recomendación: usa una contraseña distinta para MYSQL_USER (MYSQL_PASSWORD) y root (MYSQL_ROOT_PASSWORD).${NC}"
 fi
+
+# Detectar recursos si no están definidos en .env
+if [ -z "${DOCKER_MYSQL_CPU_LIMIT:-}" ] || [ -z "${DOCKER_MYSQL_MEMORY_LIMIT:-}" ]; then
+  echo -e "${BLUE}Detectando recursos del sistema para optimización...${NC}"
+  if [ -f "$SCRIPT_DIR/detect-resources.sh" ]; then
+    DETECTED_VARS=$("$SCRIPT_DIR/detect-resources.sh" 2>/dev/null | grep "^DOCKER_\|^MYSQL_\|^PHP_\|^NGINX_" || true)
+    if [ -n "$DETECTED_VARS" ]; then
+      echo -e "${YELLOW}Valores recomendados según recursos del sistema:${NC}"
+      echo "$DETECTED_VARS" | head -15
+      echo ""
+      echo -e "${YELLOW}Puedes agregar estos valores a .env o usar los valores por defecto (optimizados para servidor pequeño).${NC}"
+      echo ""
+    fi
+  fi
+fi
+
+# Exportar variables para envsubst
 export DOMAIN
+export NGINX_WORKER_PROCESSES="${NGINX_WORKER_PROCESSES:-2}"
+export NGINX_WORKER_CONNECTIONS="${NGINX_WORKER_CONNECTIONS:-512}"
+
+# Generar nginx.conf desde la plantilla
+NGINX_TEMPLATE="nginx/nginx.conf.template"
+NGINX_OUTPUT="nginx/nginx.conf"
+if [ -f "$NGINX_TEMPLATE" ]; then
+  if command -v envsubst >/dev/null 2>&1; then
+    envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < "$NGINX_TEMPLATE" > "$NGINX_OUTPUT"
+    echo -e "${GREEN}✓ Generado $NGINX_OUTPUT (workers: ${NGINX_WORKER_PROCESSES}, connections: ${NGINX_WORKER_CONNECTIONS})${NC}"
+  else
+    # Fallback sin envsubst
+    sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKER_PROCESSES}/g" \
+        -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_WORKER_CONNECTIONS}/g" \
+        "$NGINX_TEMPLATE" > "$NGINX_OUTPUT"
+    echo -e "${GREEN}✓ Generado $NGINX_OUTPUT con sed${NC}"
+  fi
+fi
 
 # Generar nginx/conf.d/wordpress.conf desde la plantilla
 TEMPLATE="nginx/conf.d/wordpress.conf.template"
@@ -85,8 +122,17 @@ else
   echo -e "${GREEN}✓ Docker disponible${NC}"
 fi
 
+# Verificar recursos configurados
+echo ""
+echo -e "${BLUE}Resumen de recursos configurados:${NC}"
+echo "  MySQL:   CPU ${DOCKER_MYSQL_CPU_LIMIT:-0.7} | RAM ${DOCKER_MYSQL_MEMORY_LIMIT:-240M}"
+echo "  WordPress: CPU ${DOCKER_WP_CPU_LIMIT:-0.7} | RAM ${DOCKER_WP_MEMORY_LIMIT:-210M}"
+echo "  Nginx:   CPU ${DOCKER_NGINX_CPU_LIMIT:-0.4} | RAM ${DOCKER_NGINX_MEMORY_LIMIT:-90M}"
 echo ""
 echo -e "${GREEN}Configuración lista. Para arrancar los servicios:${NC}"
 echo "  docker-compose up -d"
 echo ""
 echo "Para ver logs: docker-compose logs -f"
+echo ""
+echo -e "${YELLOW}Tip: Si experimentas problemas de rendimiento, ejecuta ./scripts/detect-resources.sh${NC}"
+echo -e "${YELLOW}     y ajusta los valores DOCKER_* y MYSQL_* en .env según las recomendaciones.${NC}"
