@@ -79,6 +79,10 @@ fi
 
 # Generar nginx.conf en directorio ignorado (nginx.conf principal no se procesa automáticamente)
 mkdir -p nginx/generated
+# Eliminar si existe como directorio o archivo
+[ -d "nginx/generated/nginx.conf" ] && rm -rf nginx/generated/nginx.conf
+[ -f "nginx/generated/nginx.conf" ] && rm -f nginx/generated/nginx.conf
+
 NGINX_WORKERS="${NGINX_WORKER_PROCESSES:-2}"
 NGINX_CONNS="${NGINX_WORKER_CONNECTIONS:-512}"
 if command -v envsubst >/dev/null 2>&1; then
@@ -97,6 +101,10 @@ echo -e "${BLUE}  Variable DOMAIN=${DOMAIN} se usará en el contenedor${NC}"
 
 # Generar php-config/generated/memory.ini desde .env (directorio ignorado por Git)
 mkdir -p php-config/generated
+# Eliminar si existe como directorio o archivo
+[ -d "php-config/generated/memory.ini" ] && rm -rf php-config/generated/memory.ini
+[ -f "php-config/generated/memory.ini" ] && rm -f php-config/generated/memory.ini
+
 PHP_MEM="${PHP_MEMORY_LIMIT:-128M}"
 # Asegurar que tenga M al final
 case "$PHP_MEM" in
