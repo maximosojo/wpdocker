@@ -29,34 +29,40 @@ else
   RAM_MB=1024  # Fallback conservador
 fi
 
-# Calcular límites conservadores (dejar ~30% del sistema libre)
-# Para servidores pequeños: más conservador
-if [ "$RAM_MB" -lt 2048 ]; then
-  # Servidor pequeño (<2GB): dejar 40% libre
-  AVAILABLE_RAM=$((RAM_MB * 60 / 100))
-  RESERVE_FACTOR=0.4
-else
-  # Servidor normal: dejar 30% libre
-  AVAILABLE_RAM=$((RAM_MB * 70 / 100))
-  RESERVE_FACTOR=0.3
-fi
+# Perfil "mínimo" para servidores con <1GB RAM: MySQL 8 necesita ~320M para arrancar estable
+# y WordPress/PHP necesitan margen o darán 502 (OOM). Se usan mínimos fijos y se avisa de swap.
+MIN_RAM_SERVER_MB=1000
+MYSQL_MIN_MB=320
+WP_MIN_MB=256
+NGINX_MIN_MB=64
 
-# Distribución de RAM entre servicios (para servidor pequeño)
-# MySQL: 40%, WordPress: 35%, Nginx: 15%, Sistema: 10%
-if [ "$RAM_MB" -lt 2048 ]; then
+if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
+  # Servidor muy justo (<1GB): mínimos fijos para evitar 502 y MySQL unhealthy
+  AVAILABLE_RAM=$((RAM_MB * 70 / 100))
+  MYSQL_LIMIT_MB=$MYSQL_MIN_MB
+  WP_LIMIT_MB=$WP_MIN_MB
+  NGINX_LIMIT_MB=$NGINX_MIN_MB
+  MYSQL_RESERVE_MB=$((MYSQL_MIN_MB * 40 / 100))
+  WP_RESERVE_MB=$((WP_MIN_MB * 40 / 100))
+  NGINX_RESERVE_MB=$((NGINX_MIN_MB * 50 / 100))
+elif [ "$RAM_MB" -lt 2048 ]; then
+  # Servidor pequeño (1–2GB): dejar 40% libre, pero MySQL no bajar de 320M
+  AVAILABLE_RAM=$((RAM_MB * 60 / 100))
   MYSQL_LIMIT_MB=$((AVAILABLE_RAM * 40 / 100))
+  [ "$MYSQL_LIMIT_MB" -lt "$MYSQL_MIN_MB" ] && MYSQL_LIMIT_MB=$MYSQL_MIN_MB
   WP_LIMIT_MB=$((AVAILABLE_RAM * 35 / 100))
+  [ "$WP_LIMIT_MB" -lt "$WP_MIN_MB" ] && WP_LIMIT_MB=$WP_MIN_MB
   NGINX_LIMIT_MB=$((AVAILABLE_RAM * 15 / 100))
-  
+  [ "$NGINX_LIMIT_MB" -lt "$NGINX_MIN_MB" ] && NGINX_LIMIT_MB=$NGINX_MIN_MB
   MYSQL_RESERVE_MB=$((MYSQL_LIMIT_MB * 50 / 100))
   WP_RESERVE_MB=$((WP_LIMIT_MB * 50 / 100))
   NGINX_RESERVE_MB=$((NGINX_LIMIT_MB * 50 / 100))
 else
-  # Servidor normal: distribución más generosa
+  # Servidor normal: dejar 30% libre
+  AVAILABLE_RAM=$((RAM_MB * 70 / 100))
   MYSQL_LIMIT_MB=$((AVAILABLE_RAM * 45 / 100))
   WP_LIMIT_MB=$((AVAILABLE_RAM * 40 / 100))
   NGINX_LIMIT_MB=$((AVAILABLE_RAM * 15 / 100))
-  
   MYSQL_RESERVE_MB=$((MYSQL_LIMIT_MB * 50 / 100))
   WP_RESERVE_MB=$((WP_LIMIT_MB * 50 / 100))
   NGINX_RESERVE_MB=$((NGINX_LIMIT_MB * 50 / 100))
@@ -123,24 +129,39 @@ else
   NGINX_CPU_RESERVE="${NGINX_CPU_RESERVE_NUM}.0"
 fi
 
-# MySQL: calcular innodb_buffer_pool_size (máximo 70% de RAM del contenedor, mínimo 64M)
+# MySQL: innodb_buffer_pool_size (máx 70% del contenedor; en servidores <1GB no superar 128M)
 INNODB_BUFFER_MB=$((MYSQL_LIMIT_MB * 70 / 100))
-if [ "$INNODB_BUFFER_MB" -lt 64 ]; then
-  INNODB_BUFFER_MB=64
+if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
+  INNODB_BUFFER_MB=128
+  MYSQL_TMP_HEAP_MB=16
+  MAX_CONNECTIONS=25
+else
+  if [ "$INNODB_BUFFER_MB" -lt 64 ]; then
+    INNODB_BUFFER_MB=64
+  fi
+  if [ "$INNODB_BUFFER_MB" -gt 256 ]; then
+    INNODB_BUFFER_MB=256
+  fi
+  MYSQL_TMP_HEAP_MB=16
+  if [ "$MYSQL_LIMIT_MB" -gt 512 ]; then
+    MYSQL_TMP_HEAP_MB=32
+  fi
+  # Conexiones: en servidores pequeños pocas para ahorrar RAM
+  MAX_CONNECTIONS=$((AVAILABLE_RAM / 4))
+  if [ "$MAX_CONNECTIONS" -lt 20 ]; then
+    MAX_CONNECTIONS=20
+  elif [ "$MAX_CONNECTIONS" -gt 50 ]; then
+    MAX_CONNECTIONS=50
+  fi
 fi
 
-# MySQL: conexiones máximas según RAM (regla: ~1 conexión por 2MB de RAM disponible)
-MAX_CONNECTIONS=$((AVAILABLE_RAM / 2))
-if [ "$MAX_CONNECTIONS" -lt 20 ]; then
-  MAX_CONNECTIONS=20
-elif [ "$MAX_CONNECTIONS" -gt 100 ]; then
-  MAX_CONNECTIONS=100
-fi
-
-# PHP memory_limit: 60% del límite de WordPress
+# PHP memory_limit: 60% del límite de WordPress; mínimo 128M
 PHP_MEMORY_MB=$((WP_LIMIT_MB * 60 / 100))
 if [ "$PHP_MEMORY_MB" -lt 128 ]; then
   PHP_MEMORY_MB=128
+fi
+if [ "$PHP_MEMORY_MB" -gt 256 ]; then
+  PHP_MEMORY_MB=256
 fi
 
 # Nginx workers: igual a CPU cores, máximo 4 para servidores pequeños
@@ -180,8 +201,8 @@ DOCKER_NGINX_MEMORY_RESERVE=${NGINX_RESERVE_MB}M
 # MySQL optimizaciones
 MYSQL_INNODB_BUFFER_POOL_SIZE=${INNODB_BUFFER_MB}M
 MYSQL_MAX_CONNECTIONS=${MAX_CONNECTIONS}
-MYSQL_TMP_TABLE_SIZE=${INNODB_BUFFER_MB}M
-MYSQL_MAX_HEAP_TABLE_SIZE=${INNODB_BUFFER_MB}M
+MYSQL_TMP_TABLE_SIZE=${MYSQL_TMP_HEAP_MB:-16}M
+MYSQL_MAX_HEAP_TABLE_SIZE=${MYSQL_TMP_HEAP_MB:-16}M
 
 # PHP optimizaciones
 PHP_MEMORY_LIMIT=${PHP_MEMORY_MB}M
@@ -192,3 +213,10 @@ PHP_MAX_INPUT_VARS=5000
 NGINX_WORKER_PROCESSES=${NGINX_WORKERS}
 NGINX_WORKER_CONNECTIONS=512
 EOF
+
+# Aviso para servidores con muy poca RAM
+if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
+  echo ""
+  echo "# NOTA: Servidor con menos de 1GB RAM. Se usan mínimos fijos para evitar 502 y MySQL inestable."
+  echo "# Total contenedores: ~$((MYSQL_LIMIT_MB + WP_LIMIT_MB + NGINX_LIMIT_MB))MB. Se recomienda tener swap (ej: 512MB)."
+fi

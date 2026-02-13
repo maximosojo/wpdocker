@@ -1,0 +1,43 @@
+# =============================================================================
+# Ejemplo .env para servidor con ~945MB RAM (evitar 502 Bad Gateway)
+# =============================================================================
+# Copia estas líneas a tu .env (sustituye o añade a la sección de recursos).
+# Luego: docker compose down && docker compose up -d
+#
+# Los 502 suelen ser por: (1) PHP/WordPress sin suficiente RAM (OOM),
+# (2) MySQL con demasiada poca RAM (inestable). Estos valores usan mínimos
+# probados para que MySQL arranque y WordPress responda.
+# =============================================================================
+
+# Recursos Docker - mínimos para ~1GB RAM
+DOCKER_MYSQL_CPU_LIMIT=0.7
+DOCKER_MYSQL_CPU_RESERVE=0.25
+DOCKER_MYSQL_MEMORY_LIMIT=320M
+DOCKER_MYSQL_MEMORY_RESERVE=128M
+
+DOCKER_WP_CPU_LIMIT=0.7
+DOCKER_WP_CPU_RESERVE=0.25
+DOCKER_WP_MEMORY_LIMIT=256M
+DOCKER_WP_MEMORY_RESERVE=100M
+
+DOCKER_NGINX_CPU_LIMIT=0.4
+DOCKER_NGINX_CPU_RESERVE=0.1
+DOCKER_NGINX_MEMORY_LIMIT=64M
+DOCKER_NGINX_MEMORY_RESERVE=32M
+
+# MySQL - importante: buffer 128M y pocas conexiones
+MYSQL_INNODB_BUFFER_POOL_SIZE=128M
+MYSQL_MAX_CONNECTIONS=25
+MYSQL_TMP_TABLE_SIZE=16M
+MYSQL_MAX_HEAP_TABLE_SIZE=16M
+
+# PHP
+PHP_MEMORY_LIMIT=128M
+
+# Nginx
+NGINX_WORKER_PROCESSES=2
+NGINX_WORKER_CONNECTIONS=512
+
+# Opcional: crear swap 512MB si el servidor sigue justo
+# sudo fallocate -l 512M /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+# Añadir a /etc/fstab: /swapfile none swap sw 0 0
