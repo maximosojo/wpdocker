@@ -1,10 +1,10 @@
 # Nginx configuration template - optimizado para servidores con recursos limitados
 # Variables: NGINX_WORKER_PROCESSES, NGINX_WORKER_CONNECTIONS
 
-worker_processes ${NGINX_WORKER_PROCESSES:-2};
+worker_processes ${NGINX_WORKER_PROCESSES};
 
 events {
-    worker_connections ${NGINX_WORKER_CONNECTIONS:-512};
+    worker_connections ${NGINX_WORKER_CONNECTIONS};
     multi_accept on;
 }
 
