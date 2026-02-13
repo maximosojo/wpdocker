@@ -37,14 +37,20 @@ cp .env.example .env
 # 3. Generar configuración desde .env (obligatorio antes del primer docker compose up)
 ./scripts/setup.sh
 
-# 4. Arrancar servicios
+# 4. (Opcional) Validar configuración antes de desplegar
+./scripts/test-complete.sh
+
+# 5. Arrancar servicios
 docker compose up -d
 
-# 5. Ver logs hasta que WordPress esté listo
+# 6. Ver logs hasta que WordPress esté listo
 docker compose logs -f
 ```
 
-**Nota:** Si ejecutas `docker compose up` sin `setup.sh`, se usarán archivos de configuración por defecto (localhost, valores básicos). Siempre ejecuta `./scripts/setup.sh` primero para generar la configuración correcta desde tu `.env`.
+**Nota importante:** 
+- Siempre ejecuta `./scripts/setup.sh` antes de `docker compose up` para generar la configuración correcta desde tu `.env`
+- Si ejecutas `docker compose up` sin `setup.sh`, se usarán archivos de configuración por defecto (localhost, valores básicos)
+- Usa `./scripts/test-complete.sh` para validar que todo está correcto antes de desplegar
 
 El sitio queda en `http://<DOMAIN>` (o `http://localhost` si `DOMAIN=localhost`). Si cambias `DOMAIN` o `HTTP_PORT` en `.env`, vuelve a ejecutar `./scripts/setup.sh` y reinicia: `docker-compose up -d`.
 

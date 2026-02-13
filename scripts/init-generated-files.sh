@@ -12,14 +12,26 @@ cd "$PROJECT_ROOT"
 mkdir -p nginx/generated php-config/generated
 chmod 755 nginx/generated php-config/generated 2>/dev/null || true
 
-# Copiar archivos por defecto si no existen
+# Copiar archivos por defecto si no existen Y validar que sean correctos
 if [ ! -f "nginx/generated/nginx.conf" ] && [ -f "nginx/generated/nginx.conf.default" ]; then
   cp nginx/generated/nginx.conf.default nginx/generated/nginx.conf
+  # Validar que no tenga variables sin sustituir
+  if grep -q '\${' nginx/generated/nginx.conf 2>/dev/null; then
+    echo "Error: nginx.conf.default tiene variables sin sustituir" >&2
+    rm -f nginx/generated/nginx.conf
+    exit 1
+  fi
   echo "Copiado nginx/generated/nginx.conf desde default"
 fi
 
 if [ ! -f "nginx/generated/wordpress.conf" ] && [ -f "nginx/generated/wordpress.conf.default" ]; then
   cp nginx/generated/wordpress.conf.default nginx/generated/wordpress.conf
+  # Validar que no tenga variables sin sustituir
+  if grep -q '\${' nginx/generated/wordpress.conf 2>/dev/null; then
+    echo "Error: wordpress.conf.default tiene variables sin sustituir" >&2
+    rm -f nginx/generated/wordpress.conf
+    exit 1
+  fi
   echo "Copiado nginx/generated/wordpress.conf desde default"
 fi
 

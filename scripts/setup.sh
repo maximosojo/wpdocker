@@ -103,6 +103,10 @@ NGINX_WORKERS="${NGINX_WORKER_PROCESSES:-2}"
 NGINX_CONNS="${NGINX_WORKER_CONNECTIONS:-512}"
 NGINX_OUTPUT="nginx/generated/nginx.conf"
 
+# Exportar variables para envsubst (si está disponible)
+export NGINX_WORKER_PROCESSES="$NGINX_WORKERS"
+export NGINX_WORKER_CONNECTIONS="$NGINX_CONNS"
+
 # Verificar que podemos escribir en el directorio
 if [ ! -w "nginx/generated" ]; then
   echo -e "${RED}Error: No hay permisos de escritura en nginx/generated/${NC}"
@@ -110,12 +114,31 @@ if [ ! -w "nginx/generated" ]; then
   exit 1
 fi
 
+# Eliminar archivo existente antes de generar (asegurar que no sea directorio)
+rm -f "$NGINX_OUTPUT" 2>/dev/null || true
+
 if command -v envsubst >/dev/null 2>&1; then
-  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > "$NGINX_OUTPUT" 2>/dev/null
+  # Usar envsubst con las variables exportadas
+  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
+  if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}envsubst falló, usando sed como respaldo${NC}"
+    sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
+        -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
+        nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
+  fi
 else
+  # Usar sed como respaldo
   sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
       -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
-      nginx/templates/nginx.conf.template > "$NGINX_OUTPUT" 2>/dev/null
+      nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
+fi
+
+# Validar que el archivo generado es válido (no tiene variables sin sustituir)
+if grep -q '\${' "$NGINX_OUTPUT" 2>/dev/null; then
+  echo -e "${RED}Error: El archivo generado tiene variables sin sustituir${NC}"
+  echo "Contenido de la línea problemática:"
+  grep '\${' "$NGINX_OUTPUT" | head -3
+  exit 1
 fi
 
 if [ -f "$NGINX_OUTPUT" ]; then
@@ -128,23 +151,31 @@ fi
 
 # Generar wordpress.conf en directorio ignorado (igual que nginx.conf)
 WP_OUTPUT="nginx/generated/wordpress.conf"
-# Si no existe, copiar desde default para que Docker pueda montarlo
-if [ ! -f "$WP_OUTPUT" ]; then
-  if [ -f "nginx/generated/wordpress.conf.default" ]; then
-    cp nginx/generated/wordpress.conf.default "$WP_OUTPUT"
-  fi
-fi
 
-# Eliminar si existe como directorio
-if [ -d "$WP_OUTPUT" ]; then
-  chmod -R u+w "$WP_OUTPUT" 2>/dev/null || true
-  rm -rf "$WP_OUTPUT" 2>/dev/null || true
-fi
+# Exportar DOMAIN para envsubst
+export DOMAIN
+
+# Eliminar archivo existente antes de generar (asegurar que no sea directorio)
+rm -f "$WP_OUTPUT" 2>/dev/null || true
 
 if command -v envsubst >/dev/null 2>&1; then
-  envsubst '\$DOMAIN' < nginx/templates/wordpress.conf.template > "$WP_OUTPUT" 2>/dev/null
+  # Usar envsubst con la variable exportada
+  envsubst '\$DOMAIN' < nginx/templates/wordpress.conf.template > "$WP_OUTPUT"
+  if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}envsubst falló, usando sed como respaldo${NC}"
+    sed "s/\${DOMAIN}/$DOMAIN/g" nginx/templates/wordpress.conf.template > "$WP_OUTPUT"
+  fi
 else
-  sed "s/\${DOMAIN}/$DOMAIN/g" nginx/templates/wordpress.conf.template > "$WP_OUTPUT" 2>/dev/null
+  # Usar sed como respaldo
+  sed "s/\${DOMAIN}/$DOMAIN/g" nginx/templates/wordpress.conf.template > "$WP_OUTPUT"
+fi
+
+# Validar que el archivo generado es válido (no tiene variables sin sustituir)
+if grep -q '\${DOMAIN}' "$WP_OUTPUT" 2>/dev/null; then
+  echo -e "${RED}Error: El archivo generado tiene variables sin sustituir${NC}"
+  echo "Contenido de la línea problemática:"
+  grep '\${DOMAIN}' "$WP_OUTPUT" | head -3
+  exit 1
 fi
 
 if [ -f "$WP_OUTPUT" ]; then
