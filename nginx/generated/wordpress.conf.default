@@ -1,9 +1,9 @@
-# Servidor por defecto para que Nginx arranque aunque no exista wordpress.conf
-# (wordpress.conf se genera con ./scripts/setup.sh). Las peticiones se envían a WordPress.
-server {
-    listen 80 default_server;
-    server_name _ localhost;
+# Archivo por defecto - será sobrescrito por setup.sh
+# Si ves este contenido, ejecuta: ./scripts/setup.sh
 
+server {
+    listen 80;
+    server_name localhost;
     location / {
         proxy_pass http://wordpress;
         proxy_set_header Host $host;

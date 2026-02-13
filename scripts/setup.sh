@@ -21,6 +21,11 @@ if [ ! -f "docker-compose.yml" ]; then
   exit 1
 fi
 
+# Asegurar que los archivos generados existan (usar script de inicialización)
+if [ -f "$SCRIPT_DIR/init-generated-files.sh" ]; then
+  bash "$SCRIPT_DIR/init-generated-files.sh" >/dev/null 2>&1 || true
+fi
+
 # Crear .env si no existe
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
@@ -81,8 +86,15 @@ fi
 mkdir -p nginx/generated
 chmod 755 nginx/generated 2>/dev/null || true
 
-# Eliminar si existe como directorio o archivo (usar || true para no fallar si no existe)
-if [ -e "nginx/generated/nginx.conf" ]; then
+# Si no existe, copiar desde default para que Docker pueda montarlo
+if [ ! -f "nginx/generated/nginx.conf" ]; then
+  if [ -f "nginx/generated/nginx.conf.default" ]; then
+    cp nginx/generated/nginx.conf.default nginx/generated/nginx.conf
+  fi
+fi
+
+# Eliminar si existe como directorio (usar || true para no fallar si no existe)
+if [ -d "nginx/generated/nginx.conf" ]; then
   chmod -R u+w nginx/generated/nginx.conf 2>/dev/null || true
   rm -rf nginx/generated/nginx.conf 2>/dev/null || true
 fi
@@ -116,7 +128,15 @@ fi
 
 # Generar wordpress.conf en directorio ignorado (igual que nginx.conf)
 WP_OUTPUT="nginx/generated/wordpress.conf"
-if [ -e "$WP_OUTPUT" ]; then
+# Si no existe, copiar desde default para que Docker pueda montarlo
+if [ ! -f "$WP_OUTPUT" ]; then
+  if [ -f "nginx/generated/wordpress.conf.default" ]; then
+    cp nginx/generated/wordpress.conf.default "$WP_OUTPUT"
+  fi
+fi
+
+# Eliminar si existe como directorio
+if [ -d "$WP_OUTPUT" ]; then
   chmod -R u+w "$WP_OUTPUT" 2>/dev/null || true
   rm -rf "$WP_OUTPUT" 2>/dev/null || true
 fi
@@ -139,10 +159,18 @@ fi
 mkdir -p php-config/generated
 chmod 755 php-config/generated 2>/dev/null || true
 
-# Eliminar si existe como directorio o archivo
-if [ -e "php-config/generated/memory.ini" ]; then
-  chmod -R u+w php-config/generated/memory.ini 2>/dev/null || true
-  rm -rf php-config/generated/memory.ini 2>/dev/null || true
+# Si no existe, copiar desde default para que Docker pueda montarlo
+PHP_OUTPUT="php-config/generated/memory.ini"
+if [ ! -f "$PHP_OUTPUT" ]; then
+  if [ -f "php-config/generated/memory.ini.default" ]; then
+    cp php-config/generated/memory.ini.default "$PHP_OUTPUT"
+  fi
+fi
+
+# Eliminar si existe como directorio
+if [ -d "$PHP_OUTPUT" ]; then
+  chmod -R u+w "$PHP_OUTPUT" 2>/dev/null || true
+  rm -rf "$PHP_OUTPUT" 2>/dev/null || true
 fi
 
 # Verificar que podemos escribir en el directorio

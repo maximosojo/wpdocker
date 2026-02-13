@@ -22,10 +22,14 @@ wordpress/
 
 # Nginx config generado (los templates están en nginx/templates/)
 nginx/conf.d/wordpress.conf
-nginx/generated/
+nginx/generated/*
+!nginx/generated/.gitkeep
+!nginx/generated/*.default
 
 # PHP config generado desde .env
-php-config/generated/
+php-config/generated/*
+!php-config/generated/.gitkeep
+!php-config/generated/*.default
 
 # Logs
 *.log

@@ -24,7 +24,7 @@ docker-compose --version
 
 ## 🏁 Despliegue rápido (servidor vacío o local)
 
-Todo se controla con el archivo `.env`. No hace falta tocar nginx a mano.
+Todo se controla con el archivo `.env`. Los archivos de configuración se generan automáticamente.
 
 ```bash
 # 1. Clonar o copiar el proyecto
@@ -32,17 +32,19 @@ git clone <repositorio> wpdocker && cd wpdocker
 
 # 2. Crear y editar .env (dominio y contraseñas obligatorios)
 cp .env.example .env
-# Editar .env: DOMAIN, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD (y opcionalmente puertos, etc.)
+# Editar .env: DOMAIN, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD (y opcionalmente puertos, recursos, etc.)
 
-# 3. Generar configuración de Nginx y directorios
+# 3. Generar configuración desde .env (obligatorio antes del primer docker compose up)
 ./scripts/setup.sh
 
 # 4. Arrancar servicios
-docker-compose up -d
+docker compose up -d
 
 # 5. Ver logs hasta que WordPress esté listo
-docker-compose logs -f
+docker compose logs -f
 ```
+
+**Nota:** Si ejecutas `docker compose up` sin `setup.sh`, se usarán archivos de configuración por defecto (localhost, valores básicos). Siempre ejecuta `./scripts/setup.sh` primero para generar la configuración correcta desde tu `.env`.
 
 El sitio queda en `http://<DOMAIN>` (o `http://localhost` si `DOMAIN=localhost`). Si cambias `DOMAIN` o `HTTP_PORT` en `.env`, vuelve a ejecutar `./scripts/setup.sh` y reinicia: `docker-compose up -d`.
 
