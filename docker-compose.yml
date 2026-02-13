@@ -73,8 +73,8 @@ services:
       - DOMAIN=${DOMAIN:-localhost}
     volumes:
       - ./nginx/generated/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/templates:/etc/nginx/templates:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/generated/wordpress.conf:/etc/nginx/conf.d/wordpress.conf:ro
+      - ./nginx/conf.d/00-default.conf:/etc/nginx/conf.d/00-default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - wordpress

@@ -114,10 +114,26 @@ else
   exit 1
 fi
 
-# wordpress.conf se procesa automáticamente por el contenedor desde nginx/templates/
-# Las variables se pasan vía environment en docker-compose.yml
-echo -e "${GREEN}✓ Template wordpress.conf listo (se procesa automáticamente en el contenedor)${NC}"
-echo -e "${BLUE}  Variable DOMAIN=${DOMAIN} se usará en el contenedor${NC}"
+# Generar wordpress.conf en directorio ignorado (igual que nginx.conf)
+WP_OUTPUT="nginx/generated/wordpress.conf"
+if [ -e "$WP_OUTPUT" ]; then
+  chmod -R u+w "$WP_OUTPUT" 2>/dev/null || true
+  rm -rf "$WP_OUTPUT" 2>/dev/null || true
+fi
+
+if command -v envsubst >/dev/null 2>&1; then
+  envsubst '\$DOMAIN' < nginx/templates/wordpress.conf.template > "$WP_OUTPUT" 2>/dev/null
+else
+  sed "s/\${DOMAIN}/$DOMAIN/g" nginx/templates/wordpress.conf.template > "$WP_OUTPUT" 2>/dev/null
+fi
+
+if [ -f "$WP_OUTPUT" ]; then
+  chmod 644 "$WP_OUTPUT" 2>/dev/null || true
+  echo -e "${GREEN}✓ Generado $WP_OUTPUT (server_name: $DOMAIN www.$DOMAIN)${NC}"
+else
+  echo -e "${RED}✗ Error al generar $WP_OUTPUT${NC}"
+  exit 1
+fi
 
 # Generar php-config/generated/memory.ini desde .env (directorio ignorado por Git)
 mkdir -p php-config/generated

@@ -128,13 +128,14 @@ Si experimentas errores 503 o el servidor se cuelga:
 
 ### Nginx
 
-Los archivos de configuración se generan automáticamente desde templates:
+Los archivos de configuración se generan desde templates en el host:
 
 - **`nginx/templates/`** (versionados): Contiene las plantillas `.template` con variables `${DOMAIN}`, `${NGINX_WORKER_PROCESSES}`, etc.
-- **`nginx/generated/nginx.conf`** (no versionado): Generado por `setup.sh` desde el template.
-- **`nginx/conf.d/wordpress.conf`** (no versionado): Generado automáticamente por el contenedor Nginx Alpine desde `nginx/templates/wordpress.conf.template` usando variables de entorno.
+- **`nginx/generated/`** (no versionado, en `.gitignore`): Contiene archivos generados por `setup.sh`:
+  - `nginx.conf` → generado desde `nginx/templates/nginx.conf.template`
+  - `wordpress.conf` → generado desde `nginx/templates/wordpress.conf.template`
 
-**No edites archivos generados** (`nginx/generated/` o `nginx/conf.d/wordpress.conf`). Para cambios permanentes, modifica los templates en `nginx/templates/` y ejecuta `setup.sh` (y reinicia el contenedor para que procese los templates).
+**No edites archivos generados** (`nginx/generated/*`). Para cambios permanentes, modifica los templates en `nginx/templates/` y ejecuta `./scripts/setup.sh` para regenerarlos.
 
 ### Configuración inicial de WordPress
 

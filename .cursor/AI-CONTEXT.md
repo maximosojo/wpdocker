@@ -41,12 +41,13 @@ wpdocker/
 │   ├── wp/                  # .tar.gz por backup
 │   └── *.info               # Metadatos por backup
 ├── nginx/
-│   ├── templates/           # Templates versionados (procesados por contenedor Nginx Alpine)
+│   ├── templates/           # Templates versionados (código fuente)
 │   │   ├── nginx.conf.template  # Plantilla principal con ${NGINX_WORKER_PROCESSES}
 │   │   └── wordpress.conf.template  # Plantilla servidor con ${DOMAIN}
 │   ├── generated/           # Archivos generados (no versionado; en .gitignore)
-│   │   └── nginx.conf       # Generado por setup.sh desde template
-│   ├── conf.d/              # Configs de servidor (wordpress.conf generado por contenedor)
+│   │   ├── nginx.conf       # Generado por setup.sh desde template
+│   │   └── wordpress.conf   # Generado por setup.sh desde template
+│   ├── conf.d/              # Configs de servidor (solo 00-default.conf versionado)
 │   │   └── 00-default.conf  # Servidor por defecto (versionado)
 │   └── certs/               # SSL (no versionado salvo .gitkeep)
 ├── scripts/
@@ -78,7 +79,7 @@ Los nombres de contenedores dependen de `COMPOSE_PROJECT_NAME` en `.env` (defaul
 ## 5. Scripts
 
 - **detect-resources.sh:** Detecta CPU (cores) y RAM total del sistema. Calcula límites recomendados para Docker (`DOCKER_*`), MySQL (`MYSQL_*`), PHP (`PHP_*`) y Nginx (`NGINX_*`) según recursos disponibles. Muestra valores para copiar a `.env`. Optimizado para servidores pequeños (<2GB RAM: más conservador).
-- **setup.sh:** Ejecutar antes del primer `docker-compose up -d`. Crea `.env` desde `.env.example` si no existe (y sale pidiendo editarlo). Valida `DOMAIN`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`. Si no hay variables `DOCKER_*` en `.env`, ejecuta `detect-resources.sh` y muestra recomendaciones. Genera `nginx/generated/nginx.conf` desde `nginx/templates/nginx.conf.template` (archivo generado no versionado). Genera `php-config/generated/memory.ini` desde `PHP_MEMORY_LIMIT` del `.env`. El contenedor Nginx procesa automáticamente `nginx/templates/wordpress.conf.template` → `nginx/conf.d/wordpress.conf` usando variables de entorno. Crea `backups/db` y `backups/wp`. Muestra resumen de recursos configurados.
+- **setup.sh:** Ejecutar antes del primer `docker-compose up -d`. Crea `.env` desde `.env.example` si no existe (y sale pidiendo editarlo). Valida `DOMAIN`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`. Si no hay variables `DOCKER_*` en `.env`, ejecuta `detect-resources.sh` y muestra recomendaciones. Genera `nginx/generated/nginx.conf` y `nginx/generated/wordpress.conf` desde templates (archivos generados no versionados, en `.gitignore`). Genera `php-config/generated/memory.ini` desde `PHP_MEMORY_LIMIT` del `.env`. Crea `backups/db` y `backups/wp`. Muestra resumen de recursos configurados.
 - **backup.sh:** `./scripts/backup.sh [nombre]` — Carga `.env`, usa `COMPOSE_PROJECT_NAME` para nombres de contenedores y `MYSQL_*` para mysqldump. Escribe en `backups/db/`, `backups/wp/`, `backups/<nombre>.info`.
 - **restore.sh:** `./scripts/restore.sh <nombre>` — Carga `.env`, restaura DB vía compose, para wordpress, usa contenedor temporal `wordpress:latest` con volumen `wpdocker_wp_data` para extraer el tar, reinicia wordpress.
 
@@ -88,12 +89,12 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
 
 ## 6. Nginx
 
-- **Templates:** Los templates están en `nginx/templates/` (versionados). El contenedor Nginx Alpine procesa automáticamente archivos `.template` en `/etc/nginx/templates/` usando `envsubst` y los copia a `/etc/nginx/conf.d/` (sin `.template`).
-- **Generado:** `nginx/generated/nginx.conf` se genera con `./scripts/setup.sh` desde `nginx/templates/nginx.conf.template` (no versionado, en `.gitignore`). `nginx/conf.d/wordpress.conf` se genera automáticamente por el contenedor desde `nginx/templates/wordpress.conf.template`.
+- **Templates:** Los templates están en `nginx/templates/` (versionados). Se procesan con `./scripts/setup.sh` usando `envsubst` o `sed`.
+- **Generado:** `nginx/generated/nginx.conf` y `nginx/generated/wordpress.conf` se generan con `./scripts/setup.sh` desde templates (no versionados, en `.gitignore`). Se montan directamente en el contenedor como archivos read-only.
 - **Plantillas:** 
   - `nginx/templates/nginx.conf.template` usa `${NGINX_WORKER_PROCESSES}` y `${NGINX_WORKER_CONNECTIONS}`. Optimizado: buffers aumentados (32k), timeouts aumentados (30s), compresión gzip, cache de archivos estáticos, keepalive 16 en upstream.
   - `nginx/templates/wordpress.conf.template` usa `${DOMAIN}` en `server_name`; buffers de proxy aumentados (32k-128k), timeouts aumentados (90-120s), HTTP/1.1 keepalive. SSL y acme-challenge están comentados.
-- **Variables de entorno:** Se pasan vía `environment` en `docker-compose.yml`: `DOMAIN`, `NGINX_WORKER_PROCESSES`, `NGINX_WORKER_CONNECTIONS`.
+- **Variables:** Se leen desde `.env` en `setup.sh`: `DOMAIN`, `NGINX_WORKER_PROCESSES`, `NGINX_WORKER_CONNECTIONS`.
 - Certificados en `nginx/certs/` (no versionados).
 
 ---
@@ -122,8 +123,8 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
   - Mantener compatibilidad macOS/Linux (p. ej. envsubst opcional con fallback sed en setup.sh).
 
 - **Nginx**
-  - Los templates están en `nginx/templates/` (versionados). El contenedor procesa automáticamente `.template` usando variables de entorno. Los archivos generados (`nginx/generated/`, `nginx/conf.d/wordpress.conf`) no se versionan (en `.gitignore`).
-  - Cambios de estructura HTTPS, server_name, workers o buffers hacerlos en las plantillas (`nginx/templates/nginx.conf.template`, `nginx/templates/wordpress.conf.template`). Para aplicar cambios: ejecutar `setup.sh` (regenera `nginx.conf`) y reiniciar contenedor (regenera `wordpress.conf` automáticamente).
+  - Los templates están en `nginx/templates/` (versionados). Los archivos generados (`nginx/generated/nginx.conf`, `nginx/generated/wordpress.conf`) se crean con `setup.sh` y no se versionan (en `.gitignore`).
+  - Cambios de estructura HTTPS, server_name, workers o buffers hacerlos en las plantillas (`nginx/templates/nginx.conf.template`, `nginx/templates/wordpress.conf.template`). Para aplicar cambios: ejecutar `setup.sh` (regenera ambos archivos) y reiniciar contenedor.
   - Optimizaciones aplicadas: buffers aumentados (32k-128k), timeouts aumentados (30-120s), compresión gzip, cache de archivos estáticos, keepalive 16 en upstream. Ajustar según recursos del servidor.
 
 - **WordPress / temas**
