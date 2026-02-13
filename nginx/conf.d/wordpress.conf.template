@@ -20,22 +20,16 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # Buffers optimizados para recursos limitados
-        proxy_buffer_size 16k;
-        proxy_buffers 4 32k;
-        proxy_busy_buffers_size 64k;
-        proxy_temp_file_write_size 64k;
+        # Buffers aumentados para peticiones grandes y mejorar throughput (evitar 504)
+        proxy_buffer_size 32k;
+        proxy_buffers 8 64k;
+        proxy_busy_buffers_size 128k;
+        proxy_temp_file_write_size 128k;
         
         # Timeouts aumentados para evitar 504 Gateway Timeout (backend puede tardar bajo carga)
         proxy_connect_timeout 90s;
         proxy_send_timeout 120s;
         proxy_read_timeout 120s;
-        
-        # Aumentar buffers para peticiones grandes y mejorar throughput
-        proxy_buffer_size 32k;
-        proxy_buffers 8 64k;
-        proxy_busy_buffers_size 128k;
-        proxy_temp_file_write_size 128k;
         
         # Keepalive para reducir overhead
         proxy_http_version 1.1;
