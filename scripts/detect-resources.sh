@@ -30,15 +30,16 @@ else
 fi
 
 # Perfil "mínimo" para servidores con <1GB RAM: MySQL 8 necesita ~320M para arrancar estable
-# y WordPress/PHP necesitan margen o darán 502 (OOM). Se usan mínimos fijos y se avisa de swap.
+# y WordPress/PHP necesitan margen o darán 502 (OOM). Para evitar 504 (timeout), aumentamos recursos.
 MIN_RAM_SERVER_MB=1000
-MYSQL_MIN_MB=320
-WP_MIN_MB=256
-NGINX_MIN_MB=64
+MYSQL_MIN_MB=360
+WP_MIN_MB=300
+NGINX_MIN_MB=80
 
 if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
-  # Servidor muy justo (<1GB): mínimos fijos para evitar 502 y MySQL unhealthy
-  AVAILABLE_RAM=$((RAM_MB * 70 / 100))
+  # Servidor muy justo (<1GB): usar más RAM disponible para evitar 504 (timeouts)
+  # Distribución: MySQL 360M, WordPress 300M, Nginx 80M = 740M total (deja ~205M para sistema)
+  AVAILABLE_RAM=$((RAM_MB * 78 / 100))
   MYSQL_LIMIT_MB=$MYSQL_MIN_MB
   WP_LIMIT_MB=$WP_MIN_MB
   NGINX_LIMIT_MB=$NGINX_MIN_MB
@@ -129,12 +130,12 @@ else
   NGINX_CPU_RESERVE="${NGINX_CPU_RESERVE_NUM}.0"
 fi
 
-# MySQL: innodb_buffer_pool_size (máx 70% del contenedor; en servidores <1GB no superar 128M)
+# MySQL: innodb_buffer_pool_size (máx 70% del contenedor; en servidores <1GB usar 160M para mejor rendimiento)
 INNODB_BUFFER_MB=$((MYSQL_LIMIT_MB * 70 / 100))
 if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
-  INNODB_BUFFER_MB=128
+  INNODB_BUFFER_MB=160
   MYSQL_TMP_HEAP_MB=16
-  MAX_CONNECTIONS=25
+  MAX_CONNECTIONS=30
 else
   if [ "$INNODB_BUFFER_MB" -lt 64 ]; then
     INNODB_BUFFER_MB=64
@@ -155,10 +156,11 @@ else
   fi
 fi
 
-# PHP memory_limit: en servidores <1GB usar 128M máximo para que 2 peticiones simultáneas
-# quepan en el contenedor (256M - Apache ~50M = ~206M; 2×128M encaja). Más de 128M → OOM → 502.
+# PHP memory_limit: en servidores <1GB usar 160M (con 300M para WordPress hay margen para 2 peticiones)
+# 300M - Apache ~50M = ~250M; 2×160M = 320M → ajustar a 160M para que quepa 1.5 peticiones simultáneas
+# o usar 128M para 2 peticiones. Con más RAM disponible, 160M mejora rendimiento.
 if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
-  PHP_MEMORY_MB=128
+  PHP_MEMORY_MB=160
 else
   PHP_MEMORY_MB=$((WP_LIMIT_MB * 60 / 100))
   if [ "$PHP_MEMORY_MB" -lt 128 ]; then

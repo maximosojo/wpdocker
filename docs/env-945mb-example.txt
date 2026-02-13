@@ -1,44 +1,43 @@
 # =============================================================================
-# Ejemplo .env para servidor con ~945MB RAM (evitar 502 Bad Gateway)
+# Ejemplo .env para servidor con ~945MB RAM (evitar 502/504 y mejorar rendimiento)
 # =============================================================================
 # Copia estas líneas a tu .env (sustituye o añade a la sección de recursos).
-# Luego: docker compose down && docker compose up -d
+# Luego: ./scripts/setup.sh && docker compose down && docker compose up -d
 #
-# Los 502 suelen ser por: (1) PHP/WordPress sin suficiente RAM (OOM),
-# (2) MySQL con demasiada poca RAM (inestable). Estos valores usan mínimos
-# probados para que MySQL arranque y WordPress responda.
+# Optimizado para evitar 504 Gateway Timeout: más recursos a MySQL y WordPress,
+# timeouts aumentados en Nginx, buffers más grandes. Total: ~740M (deja ~205M para sistema).
 # =============================================================================
 
-# Recursos Docker - mínimos para ~1GB RAM
-DOCKER_MYSQL_CPU_LIMIT=0.7
-DOCKER_MYSQL_CPU_RESERVE=0.25
-DOCKER_MYSQL_MEMORY_LIMIT=320M
-DOCKER_MYSQL_MEMORY_RESERVE=128M
+# Recursos Docker - optimizados para ~945MB RAM (evitar 504)
+DOCKER_MYSQL_CPU_LIMIT=0.8
+DOCKER_MYSQL_CPU_RESERVE=0.3
+DOCKER_MYSQL_MEMORY_LIMIT=360M
+DOCKER_MYSQL_MEMORY_RESERVE=144M
 
-DOCKER_WP_CPU_LIMIT=0.7
-DOCKER_WP_CPU_RESERVE=0.25
-DOCKER_WP_MEMORY_LIMIT=256M
-DOCKER_WP_MEMORY_RESERVE=100M
+DOCKER_WP_CPU_LIMIT=0.8
+DOCKER_WP_CPU_RESERVE=0.3
+DOCKER_WP_MEMORY_LIMIT=300M
+DOCKER_WP_MEMORY_RESERVE=120M
 
-DOCKER_NGINX_CPU_LIMIT=0.4
-DOCKER_NGINX_CPU_RESERVE=0.1
-DOCKER_NGINX_MEMORY_LIMIT=64M
-DOCKER_NGINX_MEMORY_RESERVE=32M
+DOCKER_NGINX_CPU_LIMIT=0.5
+DOCKER_NGINX_CPU_RESERVE=0.2
+DOCKER_NGINX_MEMORY_LIMIT=80M
+DOCKER_NGINX_MEMORY_RESERVE=40M
 
-# MySQL - importante: buffer 128M y pocas conexiones
-MYSQL_INNODB_BUFFER_POOL_SIZE=128M
-MYSQL_MAX_CONNECTIONS=25
+# MySQL - buffer aumentado a 160M para mejor rendimiento
+MYSQL_INNODB_BUFFER_POOL_SIZE=160M
+MYSQL_MAX_CONNECTIONS=30
 MYSQL_TMP_TABLE_SIZE=16M
 MYSQL_MAX_HEAP_TABLE_SIZE=16M
 
-# PHP - mantener 128M en servidores <1GB (2 peticiones simultáneas deben caber en 256M)
-PHP_MEMORY_LIMIT=128M
+# PHP - 160M para mejor rendimiento (con 300M contenedor hay margen)
+PHP_MEMORY_LIMIT=160M
 
 # Nginx
 NGINX_WORKER_PROCESSES=2
 NGINX_WORKER_CONNECTIONS=512
 
-# Después de editar .env: ./scripts/setup.sh  (genera php-config/memory.ini y nginx con timeouts 60s)
+# Después de editar .env: ./scripts/setup.sh  (genera php-config/memory.ini y nginx con timeouts 120s)
 # Luego: docker compose down && docker compose up -d
 
 # Opcional: crear swap 512MB si el servidor sigue justo

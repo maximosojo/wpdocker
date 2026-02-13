@@ -11,7 +11,7 @@ services:
       - wpdocker_db_data:/var/lib/mysql
       - ./backups/db:/backups
     restart: always
-    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-128M} --max-connections=${MYSQL_MAX_CONNECTIONS:-30} --tmp-table-size=${MYSQL_TMP_TABLE_SIZE:-16M} --max-heap-table-size=${MYSQL_MAX_HEAP_TABLE_SIZE:-16M} --innodb-log-file-size=48M --innodb-flush-log-at-trx-commit=2 --innodb-flush-method=O_DIRECT --performance-schema=OFF
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-160M} --max-connections=${MYSQL_MAX_CONNECTIONS:-30} --tmp-table-size=${MYSQL_TMP_TABLE_SIZE:-16M} --max-heap-table-size=${MYSQL_MAX_HEAP_TABLE_SIZE:-16M} --innodb-log-file-size=64M --innodb-flush-log-at-trx-commit=2 --innodb-flush-method=O_DIRECT --performance-schema=OFF --innodb-read-io-threads=2 --innodb-write-io-threads=2
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\" 2>/dev/null || exit 1"]
       interval: 10s
@@ -23,11 +23,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '${DOCKER_MYSQL_CPU_LIMIT:-0.7}'
-          memory: ${DOCKER_MYSQL_MEMORY_LIMIT:-320M}
+          cpus: '${DOCKER_MYSQL_CPU_LIMIT:-0.8}'
+          memory: ${DOCKER_MYSQL_MEMORY_LIMIT:-360M}
         reservations:
           cpus: '${DOCKER_MYSQL_CPU_RESERVE:-0.3}'
-          memory: ${DOCKER_MYSQL_MEMORY_RESERVE:-128M}
+          memory: ${DOCKER_MYSQL_MEMORY_RESERVE:-144M}
 
   wordpress:
     depends_on:
@@ -52,11 +52,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '${DOCKER_WP_CPU_LIMIT:-0.7}'
-          memory: ${DOCKER_WP_MEMORY_LIMIT:-210M}
+          cpus: '${DOCKER_WP_CPU_LIMIT:-0.8}'
+          memory: ${DOCKER_WP_MEMORY_LIMIT:-300M}
         reservations:
           cpus: '${DOCKER_WP_CPU_RESERVE:-0.3}'
-          memory: ${DOCKER_WP_MEMORY_RESERVE:-105M}
+          memory: ${DOCKER_WP_MEMORY_RESERVE:-120M}
     networks:
       - wpdocker-wordpress-network
 
@@ -78,11 +78,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '${DOCKER_NGINX_CPU_LIMIT:-0.4}'
-          memory: ${DOCKER_NGINX_MEMORY_LIMIT:-90M}
+          cpus: '${DOCKER_NGINX_CPU_LIMIT:-0.5}'
+          memory: ${DOCKER_NGINX_MEMORY_LIMIT:-80M}
         reservations:
           cpus: '${DOCKER_NGINX_CPU_RESERVE:-0.2}'
-          memory: ${DOCKER_NGINX_MEMORY_RESERVE:-45M}
+          memory: ${DOCKER_NGINX_MEMORY_RESERVE:-40M}
 
 volumes:
   wpdocker_db_data:
