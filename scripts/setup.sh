@@ -71,57 +71,43 @@ if [ -z "${DOCKER_MYSQL_CPU_LIMIT:-}" ] || [ -z "${DOCKER_MYSQL_MEMORY_LIMIT:-}"
   fi
 fi
 
-# Exportar variables para envsubst
-export DOMAIN
-export NGINX_WORKER_PROCESSES="${NGINX_WORKER_PROCESSES:-2}"
-export NGINX_WORKER_CONNECTIONS="${NGINX_WORKER_CONNECTIONS:-512}"
-
-# Generar nginx.conf desde la plantilla
-NGINX_TEMPLATE="nginx/nginx.conf.template"
-NGINX_OUTPUT="nginx/nginx.conf"
-if [ -f "$NGINX_TEMPLATE" ]; then
-  if command -v envsubst >/dev/null 2>&1; then
-    envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < "$NGINX_TEMPLATE" > "$NGINX_OUTPUT"
-    echo -e "${GREEN}✓ Generado $NGINX_OUTPUT (workers: ${NGINX_WORKER_PROCESSES}, connections: ${NGINX_WORKER_CONNECTIONS})${NC}"
-  else
-    # Fallback sin envsubst
-    sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKER_PROCESSES}/g" \
-        -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_WORKER_CONNECTIONS}/g" \
-        "$NGINX_TEMPLATE" > "$NGINX_OUTPUT"
-    echo -e "${GREEN}✓ Generado $NGINX_OUTPUT con sed${NC}"
-  fi
-fi
-
-# Generar nginx/conf.d/wordpress.conf desde la plantilla
-TEMPLATE="nginx/conf.d/wordpress.conf.template"
-OUTPUT="nginx/conf.d/wordpress.conf"
-if [ ! -f "$TEMPLATE" ]; then
-  echo -e "${RED}Error: No existe $TEMPLATE${NC}"
+# Verificar que los templates de Nginx existan
+if [ ! -f "nginx/templates/nginx.conf.template" ] || [ ! -f "nginx/templates/wordpress.conf.template" ]; then
+  echo -e "${RED}Error: Los templates de Nginx deben estar en nginx/templates/${NC}"
   exit 1
 fi
 
+# Generar nginx.conf en directorio ignorado (nginx.conf principal no se procesa automáticamente)
+mkdir -p nginx/generated
+NGINX_WORKERS="${NGINX_WORKER_PROCESSES:-2}"
+NGINX_CONNS="${NGINX_WORKER_CONNECTIONS:-512}"
 if command -v envsubst >/dev/null 2>&1; then
-  envsubst '\$DOMAIN' < "$TEMPLATE" > "$OUTPUT"
-  echo -e "${GREEN}✓ Generado $OUTPUT (server_name: $DOMAIN www.$DOMAIN)${NC}"
+  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > nginx/generated/nginx.conf
 else
-  # Fallback sin envsubst (macOS puede no tenerlo por defecto)
-  sed "s/\${DOMAIN}/$DOMAIN/g" "$TEMPLATE" > "$OUTPUT"
-  echo -e "${GREEN}✓ Generado $OUTPUT con sed (server_name: $DOMAIN www.$DOMAIN)${NC}"
+  sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
+      -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
+      nginx/templates/nginx.conf.template > nginx/generated/nginx.conf
 fi
+echo -e "${GREEN}✓ Generado nginx/generated/nginx.conf (workers: ${NGINX_WORKERS}, connections: ${NGINX_CONNS})${NC}"
 
-# Generar php-config/memory.ini desde .env (sobreescribe memory_limit de uploads.ini)
-mkdir -p php-config
+# wordpress.conf se procesa automáticamente por el contenedor desde nginx/templates/
+# Las variables se pasan vía environment en docker-compose.yml
+echo -e "${GREEN}✓ Template wordpress.conf listo (se procesa automáticamente en el contenedor)${NC}"
+echo -e "${BLUE}  Variable DOMAIN=${DOMAIN} se usará en el contenedor${NC}"
+
+# Generar php-config/generated/memory.ini desde .env (directorio ignorado por Git)
+mkdir -p php-config/generated
 PHP_MEM="${PHP_MEMORY_LIMIT:-128M}"
 # Asegurar que tenga M al final
 case "$PHP_MEM" in
   *M) ;;
   *) PHP_MEM="${PHP_MEM}M" ;;
 esac
-cat > php-config/memory.ini << PHPINI
-; Generado por setup.sh - memory_limit desde .env (evitar 502 en servidores con poca RAM)
+cat > php-config/generated/memory.ini << PHPINI
+; Generado por setup.sh - memory_limit desde .env (evitar 502/504 en servidores con poca RAM)
 memory_limit = $PHP_MEM
 PHPINI
-echo -e "${GREEN}✓ Generado php-config/memory.ini (memory_limit=$PHP_MEM)${NC}"
+echo -e "${GREEN}✓ Generado php-config/generated/memory.ini (memory_limit=$PHP_MEM)${NC}"
 
 # Directorios de backup
 mkdir -p backups/db backups/wp
@@ -139,9 +125,9 @@ fi
 # Verificar recursos configurados
 echo ""
 echo -e "${BLUE}Resumen de recursos configurados:${NC}"
-echo "  MySQL:   CPU ${DOCKER_MYSQL_CPU_LIMIT:-0.7} | RAM ${DOCKER_MYSQL_MEMORY_LIMIT:-240M}"
-echo "  WordPress: CPU ${DOCKER_WP_CPU_LIMIT:-0.7} | RAM ${DOCKER_WP_MEMORY_LIMIT:-210M}"
-echo "  Nginx:   CPU ${DOCKER_NGINX_CPU_LIMIT:-0.4} | RAM ${DOCKER_NGINX_MEMORY_LIMIT:-90M}"
+echo "  MySQL:   CPU ${DOCKER_MYSQL_CPU_LIMIT:-0.8} | RAM ${DOCKER_MYSQL_MEMORY_LIMIT:-360M}"
+echo "  WordPress: CPU ${DOCKER_WP_CPU_LIMIT:-0.8} | RAM ${DOCKER_WP_MEMORY_LIMIT:-300M}"
+echo "  Nginx:   CPU ${DOCKER_NGINX_CPU_LIMIT:-0.5} | RAM ${DOCKER_NGINX_MEMORY_LIMIT:-80M}"
 echo ""
 echo -e "${GREEN}Configuración lista. Para arrancar los servicios:${NC}"
 echo "  docker-compose up -d"

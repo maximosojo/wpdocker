@@ -128,7 +128,13 @@ Si experimentas errores 503 o el servidor se cuelga:
 
 ### Nginx
 
-El archivo `nginx/conf.d/wordpress.conf` **se genera** con `./scripts/setup.sh` a partir de `nginx/conf.d/wordpress.conf.template` y la variable `DOMAIN`. No edites `wordpress.conf` si quieres seguir desplegando solo con `.env`; para cambios permanentes, modifica la plantilla y vuelve a ejecutar `setup.sh`.
+Los archivos de configuración se generan automáticamente desde templates:
+
+- **`nginx/templates/`** (versionados): Contiene las plantillas `.template` con variables `${DOMAIN}`, `${NGINX_WORKER_PROCESSES}`, etc.
+- **`nginx/generated/nginx.conf`** (no versionado): Generado por `setup.sh` desde el template.
+- **`nginx/conf.d/wordpress.conf`** (no versionado): Generado automáticamente por el contenedor Nginx Alpine desde `nginx/templates/wordpress.conf.template` usando variables de entorno.
+
+**No edites archivos generados** (`nginx/generated/` o `nginx/conf.d/wordpress.conf`). Para cambios permanentes, modifica los templates en `nginx/templates/` y ejecuta `setup.sh` (y reinicia el contenedor para que procese los templates).
 
 ### Configuración inicial de WordPress
 
@@ -347,14 +353,22 @@ wpdocker/
 │   ├── db/              # Backups de base de datos (.sql.gz)
 │   └── wp/              # Backups de WordPress (.tar.gz)
 ├── nginx/
-│   ├── nginx.conf       # Config principal
+│   ├── templates/       # Templates versionados (procesados por contenedor)
+│   │   ├── nginx.conf.template
+│   │   └── wordpress.conf.template
+│   ├── generated/       # Archivos generados (no versionado)
+│   │   └── nginx.conf
 │   ├── conf.d/
-│   │   ├── 00-default.conf         # Siempre presente; Nginx arranca aunque no exista wordpress.conf
-│   │   ├── wordpress.conf.template  # Plantilla (versionada)
-│   │   └── wordpress.conf          # Generado por setup.sh (no versionado)
+│   │   ├── 00-default.conf         # Siempre presente (versionado)
+│   │   └── wordpress.conf          # Generado automáticamente por contenedor (no versionado)
 │   └── certs/           # Certificados SSL (no versionado)
+├── php-config/
+│   ├── opcache.ini      # OPcache (versionado)
+│   └── generated/       # Archivos generados (no versionado)
+│       └── memory.ini   # Generado por setup.sh desde PHP_MEMORY_LIMIT
 ├── scripts/
-│   ├── setup.sh         # Genera Nginx desde .env; ejecutar antes del primer up
+│   ├── detect-resources.sh  # Detecta recursos y calcula valores recomendados
+│   ├── setup.sh         # Genera archivos desde .env; ejecutar antes del primer up
 │   ├── backup.sh        # Backup DB + WP (usa .env)
 │   └── restore.sh       # Restauración (usa .env)
 └── themes/

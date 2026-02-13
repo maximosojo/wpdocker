@@ -46,7 +46,7 @@ services:
       - ./themes:/var/www/html/wp-content/themes
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
       - ./php-config/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini
-      - ./php-config/memory.ini:/usr/local/etc/php/conf.d/99-memory.ini
+      - ./php-config/generated/memory.ini:/usr/local/etc/php/conf.d/99-memory.ini
       - ./backups/wp:/backups
     restart: always
     deploy:
@@ -67,8 +67,13 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
+    environment:
+      - NGINX_WORKER_PROCESSES=${NGINX_WORKER_PROCESSES:-2}
+      - NGINX_WORKER_CONNECTIONS=${NGINX_WORKER_CONNECTIONS:-512}
+      - DOMAIN=${DOMAIN:-localhost}
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/generated/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:

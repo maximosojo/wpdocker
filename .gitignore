@@ -20,8 +20,12 @@ nginx/certs/*
 # WordPress uploads
 wordpress/
 
-# Nginx config generado por setup.sh (el código fuente es wordpress.conf.template)
+# Nginx config generado (los templates están en nginx/templates/)
 nginx/conf.d/wordpress.conf
+nginx/generated/
+
+# PHP config generado desde .env
+php-config/generated/
 
 # Logs
 *.log
