@@ -31,12 +31,15 @@ MYSQL_MAX_CONNECTIONS=25
 MYSQL_TMP_TABLE_SIZE=16M
 MYSQL_MAX_HEAP_TABLE_SIZE=16M
 
-# PHP
+# PHP - mantener 128M en servidores <1GB (2 peticiones simultáneas deben caber en 256M)
 PHP_MEMORY_LIMIT=128M
 
 # Nginx
 NGINX_WORKER_PROCESSES=2
 NGINX_WORKER_CONNECTIONS=512
+
+# Después de editar .env: ./scripts/setup.sh  (genera php-config/memory.ini y nginx con timeouts 60s)
+# Luego: docker compose down && docker compose up -d
 
 # Opcional: crear swap 512MB si el servidor sigue justo
 # sudo fallocate -l 512M /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile

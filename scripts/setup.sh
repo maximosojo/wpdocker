@@ -109,6 +109,20 @@ else
   echo -e "${GREEN}✓ Generado $OUTPUT con sed (server_name: $DOMAIN www.$DOMAIN)${NC}"
 fi
 
+# Generar php-config/memory.ini desde .env (sobreescribe memory_limit de uploads.ini)
+mkdir -p php-config
+PHP_MEM="${PHP_MEMORY_LIMIT:-128M}"
+# Asegurar que tenga M al final
+case "$PHP_MEM" in
+  *M) ;;
+  *) PHP_MEM="${PHP_MEM}M" ;;
+esac
+cat > php-config/memory.ini << PHPINI
+; Generado por setup.sh - memory_limit desde .env (evitar 502 en servidores con poca RAM)
+memory_limit = $PHP_MEM
+PHPINI
+echo -e "${GREEN}✓ Generado php-config/memory.ini (memory_limit=$PHP_MEM)${NC}"
+
 # Directorios de backup
 mkdir -p backups/db backups/wp
 echo -e "${GREEN}✓ Directorios backups/db y backups/wp listos${NC}"

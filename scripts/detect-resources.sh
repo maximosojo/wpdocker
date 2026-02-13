@@ -155,13 +155,18 @@ else
   fi
 fi
 
-# PHP memory_limit: 60% del límite de WordPress; mínimo 128M
-PHP_MEMORY_MB=$((WP_LIMIT_MB * 60 / 100))
-if [ "$PHP_MEMORY_MB" -lt 128 ]; then
+# PHP memory_limit: en servidores <1GB usar 128M máximo para que 2 peticiones simultáneas
+# quepan en el contenedor (256M - Apache ~50M = ~206M; 2×128M encaja). Más de 128M → OOM → 502.
+if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
   PHP_MEMORY_MB=128
-fi
-if [ "$PHP_MEMORY_MB" -gt 256 ]; then
-  PHP_MEMORY_MB=256
+else
+  PHP_MEMORY_MB=$((WP_LIMIT_MB * 60 / 100))
+  if [ "$PHP_MEMORY_MB" -lt 128 ]; then
+    PHP_MEMORY_MB=128
+  fi
+  if [ "$PHP_MEMORY_MB" -gt 256 ]; then
+    PHP_MEMORY_MB=256
+  fi
 fi
 
 # Nginx workers: igual a CPU cores, máximo 4 para servidores pequeños
