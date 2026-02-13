@@ -79,20 +79,40 @@ fi
 
 # Generar nginx.conf en directorio ignorado (nginx.conf principal no se procesa automáticamente)
 mkdir -p nginx/generated
-# Eliminar si existe como directorio o archivo
-[ -d "nginx/generated/nginx.conf" ] && rm -rf nginx/generated/nginx.conf
-[ -f "nginx/generated/nginx.conf" ] && rm -f nginx/generated/nginx.conf
+chmod 755 nginx/generated 2>/dev/null || true
+
+# Eliminar si existe como directorio o archivo (usar || true para no fallar si no existe)
+if [ -e "nginx/generated/nginx.conf" ]; then
+  chmod -R u+w nginx/generated/nginx.conf 2>/dev/null || true
+  rm -rf nginx/generated/nginx.conf 2>/dev/null || true
+fi
 
 NGINX_WORKERS="${NGINX_WORKER_PROCESSES:-2}"
 NGINX_CONNS="${NGINX_WORKER_CONNECTIONS:-512}"
+NGINX_OUTPUT="nginx/generated/nginx.conf"
+
+# Verificar que podemos escribir en el directorio
+if [ ! -w "nginx/generated" ]; then
+  echo -e "${RED}Error: No hay permisos de escritura en nginx/generated/${NC}"
+  echo "Ejecuta: chmod 755 nginx/generated"
+  exit 1
+fi
+
 if command -v envsubst >/dev/null 2>&1; then
-  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > nginx/generated/nginx.conf
+  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > "$NGINX_OUTPUT" 2>/dev/null
 else
   sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
       -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
-      nginx/templates/nginx.conf.template > nginx/generated/nginx.conf
+      nginx/templates/nginx.conf.template > "$NGINX_OUTPUT" 2>/dev/null
 fi
-echo -e "${GREEN}✓ Generado nginx/generated/nginx.conf (workers: ${NGINX_WORKERS}, connections: ${NGINX_CONNS})${NC}"
+
+if [ -f "$NGINX_OUTPUT" ]; then
+  chmod 644 "$NGINX_OUTPUT" 2>/dev/null || true
+  echo -e "${GREEN}✓ Generado $NGINX_OUTPUT (workers: ${NGINX_WORKERS}, connections: ${NGINX_CONNS})${NC}"
+else
+  echo -e "${RED}✗ Error al generar $NGINX_OUTPUT (verifica permisos en nginx/generated/)${NC}"
+  exit 1
+fi
 
 # wordpress.conf se procesa automáticamente por el contenedor desde nginx/templates/
 # Las variables se pasan vía environment en docker-compose.yml
@@ -101,9 +121,20 @@ echo -e "${BLUE}  Variable DOMAIN=${DOMAIN} se usará en el contenedor${NC}"
 
 # Generar php-config/generated/memory.ini desde .env (directorio ignorado por Git)
 mkdir -p php-config/generated
+chmod 755 php-config/generated 2>/dev/null || true
+
 # Eliminar si existe como directorio o archivo
-[ -d "php-config/generated/memory.ini" ] && rm -rf php-config/generated/memory.ini
-[ -f "php-config/generated/memory.ini" ] && rm -f php-config/generated/memory.ini
+if [ -e "php-config/generated/memory.ini" ]; then
+  chmod -R u+w php-config/generated/memory.ini 2>/dev/null || true
+  rm -rf php-config/generated/memory.ini 2>/dev/null || true
+fi
+
+# Verificar que podemos escribir en el directorio
+if [ ! -w "php-config/generated" ]; then
+  echo -e "${RED}Error: No hay permisos de escritura en php-config/generated/${NC}"
+  echo "Ejecuta: chmod 755 php-config/generated"
+  exit 1
+fi
 
 PHP_MEM="${PHP_MEMORY_LIMIT:-128M}"
 # Asegurar que tenga M al final
@@ -111,11 +142,18 @@ case "$PHP_MEM" in
   *M) ;;
   *) PHP_MEM="${PHP_MEM}M" ;;
 esac
-cat > php-config/generated/memory.ini << PHPINI
+PHP_OUTPUT="php-config/generated/memory.ini"
+cat > "$PHP_OUTPUT" << PHPINI
 ; Generado por setup.sh - memory_limit desde .env (evitar 502/504 en servidores con poca RAM)
 memory_limit = $PHP_MEM
 PHPINI
-echo -e "${GREEN}✓ Generado php-config/generated/memory.ini (memory_limit=$PHP_MEM)${NC}"
+if [ -f "$PHP_OUTPUT" ]; then
+  chmod 644 "$PHP_OUTPUT" 2>/dev/null || true
+  echo -e "${GREEN}✓ Generado $PHP_OUTPUT (memory_limit=$PHP_MEM)${NC}"
+else
+  echo -e "${RED}✗ Error al generar $PHP_OUTPUT (verifica permisos en php-config/generated/)${NC}"
+  exit 1
+fi
 
 # Directorios de backup
 mkdir -p backups/db backups/wp
