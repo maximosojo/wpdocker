@@ -349,8 +349,9 @@ wpdocker/
 ├── nginx/
 │   ├── nginx.conf       # Config principal
 │   ├── conf.d/
+│   │   ├── 00-default.conf         # Siempre presente; Nginx arranca aunque no exista wordpress.conf
 │   │   ├── wordpress.conf.template  # Plantilla (versionada)
-│   │   └── wordpress.conf           # Generado por setup.sh (no versionado)
+│   │   └── wordpress.conf          # Generado por setup.sh (no versionado)
 │   └── certs/           # Certificados SSL (no versionado)
 ├── scripts/
 │   ├── setup.sh         # Genera Nginx desde .env; ejecutar antes del primer up
@@ -409,6 +410,22 @@ Luego `docker-compose up -d`.
 - Verifica que los archivos de backup existan en `backups/db/` y `backups/wp/`
 - Asegúrate de que el nombre del backup sea correcto
 - Revisa los logs: `docker-compose logs wordpress`
+
+### Nginx en bucle "Restarting"
+
+Si el contenedor `wpdocker_wordpress_nginx` no arranca (status Restarting):
+
+1. **Comprueba que exista** `nginx/conf.d/00-default.conf` (va en el repo; si falta, copia del proyecto).
+2. **Revisa los logs** de Nginx:
+   ```bash
+   docker compose logs nginx
+   ```
+   Ahí suele aparecer el error de configuración (sintaxis, ruta, etc.).
+3. **Valida la configuración** dentro del contenedor:
+   ```bash
+   docker compose run --rm nginx nginx -t
+   ```
+4. Si despliegas sin ejecutar `setup.sh`, Nginx puede usar solo `00-default.conf` (funciona). Para usar tu dominio, ejecuta `./scripts/setup.sh` para generar `wordpress.conf`.
 
 ## 📝 Notas Adicionales
 
