@@ -193,6 +193,23 @@ ls backups/*.info
 3. Se restauran todos los archivos
 4. Se reinicia WordPress
 
+### Importar desde un WordPress no dockerizado
+
+Si tienes un **.sql** (o .sql.gz) y un **.tar.gz** con la carpeta **wp-content** de un servidor anterior:
+
+```bash
+# 1. Servicios levantados
+docker compose up -d
+
+# 2. Importar (rutas a tus archivos)
+./scripts/import-external.sh mi_backup.sql wp-content.tar.gz
+
+# 3. Si el sitio antiguo usaba otra URL, actualizar en la BD (ej. WP-CLI)
+docker compose exec wordpress wp search-replace 'https://url-antigua.com' 'http://tu-dominio' --all-tables --allow-root
+```
+
+Guía detallada: [docs/importar-backup-externo.md](docs/importar-backup-externo.md).
+
 ## 🌐 Migración a un Nuevo Servidor
 
 ### Paso 1: Realizar Backup en el Servidor Original
