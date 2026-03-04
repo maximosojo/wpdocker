@@ -1,7 +1,10 @@
+# Usar: docker compose --compatibility up -d (o ./scripts/up.sh) para que los límites de RAM se apliquen
 services:
   db:
     image: mysql:8.0
     container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_mysql
+    mem_limit: ${DOCKER_MYSQL_MEMORY_LIMIT:-700M}
+    mem_reservation: ${DOCKER_MYSQL_MEMORY_RESERVE:-420M}
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-wordpress_db}
@@ -35,6 +38,8 @@ services:
         condition: service_healthy
     image: wordpress:latest
     container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app
+    mem_limit: ${DOCKER_WP_MEMORY_LIMIT:-700M}
+    mem_reservation: ${DOCKER_WP_MEMORY_RESERVE:-420M}
     environment:
       WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
       WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress_user}
@@ -63,6 +68,8 @@ services:
   nginx:
     image: nginx:alpine
     container_name: ${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_nginx
+    mem_limit: ${DOCKER_NGINX_MEMORY_LIMIT:-160M}
+    mem_reservation: ${DOCKER_NGINX_MEMORY_RESERVE:-96M}
     restart: always
     ports:
       - "${HTTP_PORT:-80}:80"

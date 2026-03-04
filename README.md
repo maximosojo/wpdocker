@@ -1,440 +1,399 @@
 # WordPress con Docker
 
-Proyecto WordPress listo para desplegar en **servidores vacíos** con mínima configuración: solo un archivo `.env` y dos comandos.
+WordPress listo para desplegar en **servidores vacíos** (Debian, Ubuntu, etc.) con mínima configuración: un archivo `.env` y unos pocos comandos.
 
-## 🚀 Características
+---
 
-- ✅ **Despliegue genérico:** un solo `.env` define dominio, BD, puertos y debug
-- ✅ **Optimización automática:** detecta recursos del servidor y ajusta límites de CPU/RAM dinámicamente
-- ✅ **Servidores pequeños:** optimizado para 2 cores / 1GB RAM (evita errores 503)
-- ✅ Nginx generado desde plantilla (no editar `wordpress.conf` a mano)
-- ✅ Backup y restauración que usan el mismo `.env`
-- ✅ Configuración SSL lista para Let's Encrypt
-- ✅ Nginx como proxy reverso; MySQL 8 + WordPress oficial
+## Índice
+
+1. [Requisitos](#-requisitos)
+2. [Instalación de Docker](#-instalación-de-docker)
+3. [Despliegue paso a paso](#-despliegue-paso-a-paso)
+4. [Configuración (.env)](#-configuración-env)
+5. [Optimización de recursos](#-optimización-de-recursos)
+6. [Backup y restauración](#-backup-y-restauración)
+7. [Migración e importación](#-migración-e-importación)
+8. [SSL (HTTPS)](#-ssl-https)
+9. [Comandos útiles](#-comandos-útiles)
+10. [Estructura del proyecto](#-estructura-del-proyecto)
+11. [Solución de problemas](#-solución-de-problemas)
+
+---
 
 ## 📋 Requisitos
 
-- Docker (20.10+) y Docker Compose (2.0+)
-- En el servidor: solo Docker instalado; el resto se hace con el proyecto
+- **Docker** 20.10 o superior  
+- **Docker Compose** 2.0 o superior (plugin `docker compose` o binario `docker-compose`)  
+- Sistema: **Debian**, **Ubuntu** u otra distro Linux; también funciona en **macOS** y **Windows** con Docker Desktop  
+
+Comprobar instalación:
 
 ```bash
 docker --version
-docker-compose --version
+docker compose version
+# o, según instalación: docker-compose --version
 ```
 
-## 🏁 Despliegue rápido (servidor vacío o local)
+Si no tienes Docker instalado, sigue la sección [Instalación de Docker](#-instalación-de-docker).
 
-Todo se controla con el archivo `.env`. Los archivos de configuración se generan automáticamente.
+---
+
+## 🔧 Instalación de Docker
+
+### Debian / Ubuntu
 
 ```bash
-# 1. Clonar o copiar el proyecto
-git clone <repositorio> wpdocker && cd wpdocker
+# Actualizar e instalar dependencias
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
 
-# 2. Crear y editar .env (dominio y contraseñas obligatorios)
+# Añadir clave y repositorio oficial de Docker
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# En Debian, sustituir "ubuntu" por "debian" en la URL anterior y usar:
+# echo "deb [arch=...] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Instalar Docker Engine y Docker Compose
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# (Opcional) Ejecutar Docker sin sudo
+sudo usermod -aG docker $USER
+# Cerrar sesión y volver a entrar para que aplique
+```
+
+### Otras distros / método genérico
+
+- **Fedora / RHEL / CentOS:** [Install Docker Engine](https://docs.docker.com/engine/install/fedora/)  
+- **macOS / Windows:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)  
+- **Script oficial (cualquier Linux):** `curl -fsSL https://get.docker.com | sh`
+
+---
+
+## 🏁 Despliegue paso a paso
+
+Sigue estos pasos en orden para levantar WordPress sin errores.
+
+### Paso 1: Obtener el proyecto
+
+```bash
+git clone <url-del-repositorio> wpdocker
+cd wpdocker
+```
+
+Si no usas Git, copia la carpeta del proyecto en el servidor y entra en ella.
+
+---
+
+### Paso 2: Crear y editar el archivo `.env`
+
+```bash
 cp .env.example .env
-# Editar .env: DOMAIN, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD (y opcionalmente puertos, recursos, etc.)
+nano .env   # o vim, vi, etc.
+```
 
-# 3. Generar configuración desde .env (obligatorio antes del primer docker compose up)
+**Mínimo obligatorio:** define estas variables:
+
+| Variable | Ejemplo | Descripción |
+|----------|---------|-------------|
+| `DOMAIN` | `midominio.com` o `localhost` | Dominio del sitio |
+| `MYSQL_ROOT_PASSWORD` | Una contraseña segura | Contraseña root de MySQL |
+| `MYSQL_PASSWORD` | Otra contraseña segura | Contraseña del usuario de WordPress en la BD |
+
+El resto (puertos, base de datos, recursos) tiene valores por defecto; puedes dejarlos o ajustarlos más adelante.
+
+---
+
+### Paso 3: Generar la configuración
+
+Este script genera la configuración de Nginx y PHP a partir del `.env`. **Debe ejecutarse antes del primer `docker compose up`.**
+
+```bash
 ./scripts/setup.sh
+```
 
-# 4. (Opcional) Validar configuración antes de desplegar
+Si aparece algún error (por ejemplo falta `DOMAIN` o contraseñas), corrige el `.env` y vuelve a ejecutar `./scripts/setup.sh`.
+
+---
+
+### Paso 4: (Opcional) Validar antes de arrancar
+
+```bash
 ./scripts/test-complete.sh
+```
 
-# 5. Arrancar servicios
-docker compose up -d
+Si todo es correcto, el script termina sin errores y puedes seguir.
 
-# 6. Ver logs hasta que WordPress esté listo
+---
+
+### Paso 5: Arrancar los servicios (con límites de RAM aplicados)
+
+Para que los contenedores usen la RAM definida en `.env` (y no se queden en ~900M ni den 502), arranca con:
+
+```bash
+./scripts/up.sh
+```
+
+O bien: `docker compose --compatibility up -d`. Si usas solo `docker compose up -d`, Docker **no aplica** los límites de memoria y el sitio puede ir lento o dar 502.
+
+Espera a que MySQL marque *healthy* y WordPress y Nginx estén *Up*. Puedes seguir los logs:
+
+```bash
 docker compose logs -f
 ```
 
-**Nota importante:** 
-- Siempre ejecuta `./scripts/setup.sh` antes de `docker compose up` para generar la configuración correcta desde tu `.env`
-- Si ejecutas `docker compose up` sin `setup.sh`, se usarán archivos de configuración por defecto (localhost, valores básicos)
-- Usa `./scripts/test-complete.sh` para validar que todo está correcto antes de desplegar
+Pulsa `Ctrl+C` para salir de los logs (los contenedores siguen en marcha).
 
-El sitio queda en `http://<DOMAIN>` (o `http://localhost` si `DOMAIN=localhost`). Si cambias `DOMAIN` o `HTTP_PORT` en `.env`, vuelve a ejecutar `./scripts/setup.sh` y reinicia: `docker-compose up -d`.
+---
 
-## 🔧 Variables de entorno (.env)
+### Paso 6: Completar WordPress en el navegador
 
-Copia `.env.example` a `.env` y rellena al menos:
+1. Abre `http://<DOMAIN>` (o `http://localhost` si `DOMAIN=localhost`).  
+2. Si usas otro puerto (p. ej. `HTTP_PORT=8080` en `.env`), usa `http://localhost:8080`.  
+3. Sigue el asistente de instalación (idioma, usuario administrador, etc.).
+
+Cuando termines, ya tienes WordPress funcionando con Docker.
+
+---
+
+### Resumen de comandos (despliegue rápido)
+
+```bash
+cd wpdocker
+cp .env.example .env
+nano .env                    # Definir DOMAIN, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD
+./scripts/setup.sh
+./scripts/test-complete.sh   # opcional
+docker compose up -d
+# Abrir en navegador: http://<DOMAIN> o http://localhost
+```
+
+---
+
+## 🔧 Configuración (.env)
+
+Copia `.env.example` a `.env` y ajusta lo que necesites. Variables principales:
 
 | Variable | Obligatorio | Descripción |
 |----------|-------------|-------------|
 | `DOMAIN` | Sí | Dominio del sitio (ej. `midominio.com` o `localhost`) |
 | `MYSQL_ROOT_PASSWORD` | Sí | Contraseña del usuario root de MySQL |
-| `MYSQL_PASSWORD` | Sí | Contraseña del usuario de WordPress (y `WORDPRESS_DB_*`) |
-| `COMPOSE_PROJECT_NAME` | No | Identificador del proyecto (default: `wpdocker`); define nombres de contenedores |
+| `MYSQL_PASSWORD` | Sí | Contraseña del usuario de WordPress en la BD |
+| `COMPOSE_PROJECT_NAME` | No | Identificador del proyecto (default: `wpdocker`) |
 | `MYSQL_DATABASE`, `MYSQL_USER` | No | Base de datos y usuario (default: `wordpress_db`, `wordpress_user`) |
 | `HTTP_PORT`, `HTTPS_PORT` | No | Puertos en el host (default: 80, 443) |
-| `WORDPRESS_DEBUG` | No | `true`/`false` (default: `false`) |
+| `WORDPRESS_DEBUG` | No | `true` o `false` (default: `false`) |
 
-El resto está documentado en `.env.example`. **No subas `.env` a Git.**
+Más opciones (recursos, MySQL, PHP, Nginx) están documentadas en `.env.example`. **No subas `.env` a Git** (ya está en `.gitignore`).
+
+Si cambias `DOMAIN` o `HTTP_PORT`/`HTTPS_PORT`, vuelve a ejecutar `./scripts/setup.sh` y reinicia:
+
+```bash
+./scripts/setup.sh
+docker compose up -d
+```
+
+---
 
 ## ⚡ Optimización de recursos
 
-El proyecto está optimizado para servidores con recursos limitados (2 cores, 1GB RAM). Los recursos se detectan automáticamente y se ajustan dinámicamente.
+El proyecto está pensado para servidores con pocos recursos (p. ej. 2 cores, 1 GB RAM). Los límites por defecto ya están ajustados para reducir 503 y cuelgues.
 
 ### Detección automática
 
-Al ejecutar `./scripts/setup.sh`, se detectan los recursos del sistema y se muestran valores recomendados. Si no defines variables `DOCKER_*` en `.env`, se usan valores por defecto optimizados para servidor pequeño.
+Al ejecutar `./scripts/setup.sh`, si no tienes variables `DOCKER_*` en `.env`, se muestran valores recomendados según el sistema. Puedes copiarlos al `.env` o usar los valores por defecto.
 
 ### Ajustar recursos manualmente
-
-Para servidores con más recursos, ejecuta:
 
 ```bash
 ./scripts/detect-resources.sh
 ```
 
-Esto muestra valores recomendados según tu servidor. Copia los valores `DOCKER_*`, `MYSQL_*`, `PHP_*` y `NGINX_*` a tu `.env`.
+Copia las variables que imprima (DOCKER_*, MYSQL_*, PHP_*, NGINX_*) a tu `.env` y vuelve a ejecutar `./scripts/setup.sh` y `docker compose up -d`.
 
-### Variables de recursos en .env
+### Variables de recursos (resumen)
 
 | Variable | Descripción | Default (servidor pequeño) |
-|----------|-------------|----------------------------|
-| `DOCKER_MYSQL_CPU_LIMIT` | Límite de CPU para MySQL | `0.7` |
-| `DOCKER_MYSQL_MEMORY_LIMIT` | Límite de RAM para MySQL | `240M` |
-| `DOCKER_WP_CPU_LIMIT` | Límite de CPU para WordPress | `0.7` |
-| `DOCKER_WP_MEMORY_LIMIT` | Límite de RAM para WordPress | `210M` |
-| `DOCKER_NGINX_CPU_LIMIT` | Límite de CPU para Nginx | `0.4` |
-| `DOCKER_NGINX_MEMORY_LIMIT` | Límite de RAM para Nginx | `90M` |
-| `MYSQL_INNODB_BUFFER_POOL_SIZE` | Buffer pool de InnoDB | `168M` |
-| `MYSQL_MAX_CONNECTIONS` | Conexiones máximas MySQL | `30` |
-| `PHP_MEMORY_LIMIT` | Memoria PHP | `128M` |
-| `NGINX_WORKER_PROCESSES` | Workers de Nginx | `2` |
+|----------|-------------|-----------------------------|
+| `DOCKER_MYSQL_MEMORY_LIMIT` | RAM máxima MySQL | `360M` |
+| `DOCKER_WP_MEMORY_LIMIT` | RAM máxima WordPress | `300M` |
+| `DOCKER_NGINX_MEMORY_LIMIT` | RAM máxima Nginx | `80M` |
+| `MYSQL_INNODB_BUFFER_POOL_SIZE` | Buffer InnoDB | `160M` |
+| `PHP_MEMORY_LIMIT` | Memoria PHP | `160M` |
+| `NGINX_WORKER_PROCESSES` | Workers Nginx | `2` |
 
-### Optimizaciones aplicadas
+Si ves 503 o el servidor muy lento, ejecuta `./scripts/detect-resources.sh`, ajusta según las recomendaciones y reinicia los contenedores.
 
-- **MySQL:** Buffer pool ajustado según RAM, conexiones limitadas, flush optimizado
-- **PHP:** OPcache habilitado, memory_limit reducido, realpath cache optimizado
-- **Nginx:** Workers según CPU, buffers pequeños, timeouts reducidos, compresión gzip
-- **Docker:** Límites de CPU y RAM por contenedor para evitar OOM
+**Servidor con 1 GB RAM:** Si tienes solo 1 GB de RAM, no asignes a los contenedores más de ~740 MB en total o el sistema se colgará o reiniciará. Usa el perfil preparado para 1 GB: [docs/servidor-1gb-ram.md](docs/servidor-1gb-ram.md) y [docs/env-1gb-ram.example](docs/env-1gb-ram.example).
 
-### Solución de problemas de rendimiento
+### Nginx (archivos generados)
 
-Si experimentas errores 503 o el servidor se cuelga:
+- **`nginx/templates/`** (en el repo): plantillas con variables como `${DOMAIN}`, `${NGINX_WORKER_PROCESSES}`.
+- **`nginx/generated/`** (no en Git): archivos generados por `./scripts/setup.sh`.
 
-1. **Verifica recursos disponibles:**
-   ```bash
-   free -h
-   nproc
-   ```
+No edites los archivos en `nginx/generated/`. Para cambios permanentes, modifica los templates en `nginx/templates/` y vuelve a ejecutar `./scripts/setup.sh`.
 
-2. **Ejecuta detección de recursos:**
-   ```bash
-   ./scripts/detect-resources.sh
-   ```
+---
 
-3. **Ajusta valores en `.env`** según las recomendaciones
+## 💾 Backup y restauración
 
-4. **Reinicia servicios:**
-   ```bash
-   docker-compose down
-   ./scripts/setup.sh
-   docker-compose up -d
-   ```
-
-### Nginx
-
-Los archivos de configuración se generan desde templates en el host:
-
-- **`nginx/templates/`** (versionados): Contiene las plantillas `.template` con variables `${DOMAIN}`, `${NGINX_WORKER_PROCESSES}`, etc.
-- **`nginx/generated/`** (no versionado, en `.gitignore`): Contiene archivos generados por `setup.sh`:
-  - `nginx.conf` → generado desde `nginx/templates/nginx.conf.template`
-  - `wordpress.conf` → generado desde `nginx/templates/wordpress.conf.template`
-
-**No edites archivos generados** (`nginx/generated/*`). Para cambios permanentes, modifica los templates en `nginx/templates/` y ejecuta `./scripts/setup.sh` para regenerarlos.
-
-### Configuración inicial de WordPress
-
-1. Abre el navegador en `http://<DOMAIN>` (o el puerto que hayas puesto en `HTTP_PORT`).
-2. Sigue el asistente de instalación de WordPress (idioma, usuario administrador, etc.).
-3. La base de datos se crea automáticamente la primera vez.
-
-## 💾 Backup y Restauración
-
-### Realizar un Backup
-
-El script de backup crea un respaldo completo de:
-- Base de datos MySQL
-- Archivos de WordPress (themes, plugins, uploads, etc.)
+### Hacer backup
 
 ```bash
-# Backup con nombre automático (timestamp)
+# Con nombre automático (fecha/hora)
 ./scripts/backup.sh
 
-# Backup con nombre personalizado
+# Con nombre propio
 ./scripts/backup.sh mi_backup_enero_2024
 ```
 
-Los backups se guardan en:
-- Base de datos: `backups/db/nombre_backup.sql.gz`
-- WordPress: `backups/wp/nombre_backup.tar.gz`
-- Información: `backups/nombre_backup.info`
+Se crean:
 
-### Restaurar un Backup
+- Base de datos: `backups/db/<nombre>.sql.gz`
+- Archivos WordPress: `backups/wp/<nombre>.tar.gz`
+- Metadatos: `backups/<nombre>.info`
 
-⚠️ **ADVERTENCIA**: La restauración sobrescribirá todos los datos actuales.
+### Restaurar un backup
+
+⚠️ **Sobrescribe** la base de datos y los archivos actuales.
 
 ```bash
-# Listar backups disponibles (si no recuerdas el nombre)
+# Ver backups disponibles
 ls backups/*.info
 
-# Restaurar un backup específico
+# Restaurar uno
 ./scripts/restore.sh backup_20240101_120000
-
-# O con nombre personalizado
+# o
 ./scripts/restore.sh mi_backup_enero_2024
 ```
 
-**Proceso de restauración**:
-1. Se restaura la base de datos
-2. Se detiene WordPress temporalmente
-3. Se restauran todos los archivos
-4. Se reinicia WordPress
+---
+
+## 🌐 Migración e importación
+
+### Migrar a otro servidor (backup de este proyecto)
+
+1. En el servidor actual: `./scripts/backup.sh migracion_20240101`
+2. Copiar la carpeta del proyecto (y `backups/`) al nuevo servidor.
+3. En el nuevo servidor: crear/editar `.env`, ejecutar `./scripts/setup.sh`, `docker compose up -d`.
+4. Cuando todo esté arriba: `./scripts/restore.sh migracion_20240101`
 
 ### Importar desde un WordPress no dockerizado
 
-Si tienes un **.sql** (o .sql.gz) y un **.tar.gz** con la carpeta **wp-content** de un servidor anterior:
+Si tienes un **.sql** (o .sql.gz) y un **.tar.gz** con **wp-content** de otro servidor:
 
 ```bash
-# 1. Servicios levantados
 docker compose up -d
-
-# 2. Importar (rutas a tus archivos)
-./scripts/import-external.sh mi_backup.sql wp-content.tar.gz
-
-# 3. Si el sitio antiguo usaba otra URL, actualizar en la BD (ej. WP-CLI)
-docker compose exec wordpress wp search-replace 'https://url-antigua.com' 'http://tu-dominio' --all-tables --allow-root
+./scripts/import-external.sh /ruta/al/archivo.sql /ruta/al/wp-content.tar.gz
 ```
+
+Si la URL del sitio ha cambiado, actualiza las URLs en la base de datos (por ejemplo con WP-CLI o un plugin de búsqueda/reemplazo).
 
 Guía detallada: [docs/importar-backup-externo.md](docs/importar-backup-externo.md).
 
-## 🌐 Migración a un Nuevo Servidor
+---
 
-### Paso 1: Realizar Backup en el Servidor Original
+## 🔒 SSL (HTTPS)
+
+### Let's Encrypt con Certbot (en el host)
+
+1. Instalar Certbot (ej. en Ubuntu/Debian: `sudo apt-get install certbot`).
+2. Obtener certificados:  
+   `sudo certbot certonly --standalone -d tudominio.com -d www.tudominio.com`
+3. Copiar certificados al proyecto:  
+   `fullchain.pem` y `privkey.pem` en `nginx/certs/`.
+4. Configurar el bloque HTTPS en la configuración de Nginx (plantilla o generada) y reiniciar:  
+   `docker compose restart nginx`
+
+### Certificados propios
+
+Coloca `fullchain.pem` y `privkey.pem` en `nginx/certs/` y configura el bloque `server` HTTPS en la configuración de Nginx (según tus templates o `wordpress.conf`).
+
+---
+
+## 🛠️ Comandos útiles
+
+### Contenedores
 
 ```bash
-./scripts/backup.sh migracion_servidor_fecha
+docker compose up -d          # Arrancar
+docker compose stop           # Parar
+docker compose down           # Parar y eliminar contenedores
+docker compose down -v        # Además eliminar volúmenes (¡borra datos!)
+docker compose logs -f        # Logs de todos los servicios
+docker compose logs -f wordpress
+docker compose restart nginx  # Reiniciar un servicio
+docker compose ps             # Estado
 ```
 
-### Paso 2: Transferir los Backups al Nuevo Servidor
-
-Usa `scp`, `rsync`, o cualquier método de transferencia:
+### Acceso a contenedores
 
 ```bash
-# Ejemplo con scp
-scp -r backups/ usuario@nuevo-servidor:/ruta/al/proyecto/wordpress/
-
-# O comprimir primero
-tar -czf backups.tar.gz backups/
-scp backups.tar.gz usuario@nuevo-servidor:/ruta/al/proyecto/wordpress/
-```
-
-### Paso 3: Configurar el nuevo servidor
-
-1. **Copiar el proyecto** (y la carpeta `backups/` si vas a restaurar):
-   ```bash
-   git clone <repositorio> wpdocker && cd wpdocker
-   ```
-
-2. **Crear `.env`** con el mismo dominio, contraseñas y opciones que necesites (puedes copiar el `.env` del servidor anterior o crear desde `.env.example`).
-
-3. **Generar Nginx y arrancar**:
-   ```bash
-   ./scripts/setup.sh
-   docker-compose up -d
-   ```
-
-4. **Si trajiste backups**, restaurar cuando los servicios estén listos:
-   ```bash
-   docker-compose logs -f   # Ctrl+C cuando WordPress esté listo
-   ./scripts/restore.sh migracion_servidor_fecha
-   ```
-
-### Paso 4: Restaurar el Backup
-
-```bash
-# Asegúrate de que los backups estén en la carpeta backups/
-./scripts/restore.sh migracion_servidor_fecha
-```
-
-### Paso 5: Configurar SSL (Opcional)
-
-#### Opción A: Let's Encrypt con Certbot
-
-1. **Instalar Certbot** (en el host, no en el contenedor):
-   ```bash
-   # Ubuntu/Debian
-   sudo apt-get update
-   sudo apt-get install certbot
-
-   # macOS
-   brew install certbot
-   ```
-
-2. **Obtener certificados**:
-   ```bash
-   sudo certbot certonly --standalone -d tudominio.com -d www.tudominio.com
-   ```
-
-3. **Copiar certificados a la carpeta del proyecto**:
-   ```bash
-   sudo cp /etc/letsencrypt/live/tudominio.com/fullchain.pem nginx/certs/
-   sudo cp /etc/letsencrypt/live/tudominio.com/privkey.pem nginx/certs/
-   sudo chown $USER:$USER nginx/certs/*.pem
-   ```
-
-4. **Habilitar SSL en nginx**:
-   - Edita `nginx/conf.d/wordpress.conf`
-   - Descomenta la sección `server` de HTTPS (puerto 443)
-   - Descomenta la redirección de HTTP a HTTPS en la sección del puerto 80
-   - Actualiza las rutas de los certificados si es necesario
-
-5. **Reiniciar nginx**:
-   ```bash
-   docker-compose restart nginx
-   ```
-
-#### Opción B: Certificados SSL Propios
-
-Si tienes tus propios certificados SSL:
-
-1. Coloca los certificados en `nginx/certs/`:
-   - `fullchain.pem` (certificado completo)
-   - `privkey.pem` (clave privada)
-   - `chain.pem` (cadena, opcional)
-
-2. Edita `nginx/conf.d/wordpress.conf`:
-   - Descomenta y configura la sección HTTPS
-   - Actualiza las rutas si los nombres de archivo son diferentes
-
-3. Reinicia nginx:
-   ```bash
-   docker-compose restart nginx
-   ```
-
-## 🛠️ Comandos Útiles
-
-### Gestión de Contenedores
-
-```bash
-# Iniciar servicios
-docker-compose up -d
-
-# Detener servicios
-docker-compose stop
-
-# Detener y eliminar contenedores
-docker-compose down
-
-# Ver logs
-docker-compose logs -f
-
-# Ver logs de un servicio específico
-docker-compose logs -f wordpress
-
-# Reiniciar un servicio
-docker-compose restart nginx
-
-# Reconstruir servicios
-docker-compose up -d --build
-```
-
-### Acceso a Contenedores
-
-```bash
-# Acceder al contenedor de WordPress
-docker-compose exec wordpress bash
-
-# Acceder al contenedor de MySQL
-docker-compose exec db bash
-
-# Acceder a MySQL directamente
-docker-compose exec db mysql -u wordpress_user -p wordpress_db
+docker compose exec wordpress bash
+docker compose exec db bash
+docker compose exec db mysql -u wordpress_user -p wordpress_db
 ```
 
 ### Limpieza
 
 ```bash
-# Eliminar contenedores, redes y volúmenes
-docker-compose down -v
-
-# Eliminar imágenes no utilizadas
+docker compose down -v
 docker image prune
-
-# Limpiar todo (¡cuidado! elimina contenedores, imágenes, volúmenes)
-docker system prune -a --volumes
 ```
+
+---
 
 ## 📁 Estructura del proyecto
 
 ```
 wpdocker/
-├── .env.example         # Plantilla de variables (copiar a .env)
-├── .env                 # Tu configuración (no versionado)
-├── docker-compose.yml   # Servicios: db, wordpress, nginx
-├── uploads.ini          # Límites PHP (uploads, memoria, etc.)
-├── backups/             # Generado; no versionado
-│   ├── db/              # Backups de base de datos (.sql.gz)
-│   └── wp/              # Backups de WordPress (.tar.gz)
+├── .env.example              # Plantilla → copiar a .env
+├── .env                     # Tu configuración (no versionado)
+├── docker-compose.yml       # Servicios: db, wordpress, nginx
+├── uploads.ini              # Límites PHP (subidas, memoria)
+├── backups/                 # No versionado
+│   ├── db/                  # .sql.gz
+│   └── wp/                  # .tar.gz
 ├── nginx/
-│   ├── templates/       # Templates versionados (procesados por contenedor)
-│   │   ├── nginx.conf.template
-│   │   └── wordpress.conf.template
-│   ├── generated/       # Archivos generados (no versionado)
-│   │   └── nginx.conf
-│   ├── conf.d/
-│   │   ├── 00-default.conf         # Siempre presente (versionado)
-│   │   └── wordpress.conf          # Generado automáticamente por contenedor (no versionado)
-│   └── certs/           # Certificados SSL (no versionado)
+│   ├── templates/           # Plantillas (versionadas)
+│   ├── generated/           # Generados por setup.sh (no versionado)
+│   ├── conf.d/              # 00-default.conf + wordpress.conf
+│   └── certs/               # SSL
 ├── php-config/
-│   ├── opcache.ini      # OPcache (versionado)
-│   └── generated/       # Archivos generados (no versionado)
-│       └── memory.ini   # Generado por setup.sh desde PHP_MEMORY_LIMIT
+│   ├── opcache.ini
+│   └── generated/           # memory.ini (generado)
 ├── scripts/
-│   ├── detect-resources.sh  # Detecta recursos y calcula valores recomendados
-│   ├── setup.sh         # Genera archivos desde .env; ejecutar antes del primer up
-│   ├── backup.sh        # Backup DB + WP (usa .env)
-│   └── restore.sh       # Restauración (usa .env)
+│   ├── setup.sh             # Obligatorio antes del primer up
+│   ├── test-complete.sh     # Validación opcional
+│   ├── detect-resources.sh  # Recomendaciones de recursos
+│   ├── backup.sh
+│   ├── restore.sh
+│   └── import-external.sh   # Importar .sql + wp-content externos
 └── themes/
-    └── astra-child/     # Tema hijo
+    └── astra-child/
 ```
 
-## 🔒 Seguridad
+---
 
-- ⚠️ **Nunca** subas el archivo `.env` a Git (ya está en `.gitignore`)
-- ⚠️ **Cambia** las contraseñas por defecto en producción
-- ⚠️ **Usa HTTPS** en producción con certificados SSL válidos
-- ⚠️ **Mantén** WordPress y los plugins actualizados
-- ⚠️ **Backup** regularmente antes de actualizaciones importantes
+## 🐛 Solución de problemas
 
-## 🐛 Solución de Problemas
+### WordPress no conecta con la base de datos
 
-### WordPress no se conecta a la base de datos
+- Comprueba que los contenedores estén en marcha: `docker compose ps`
+- Revisa que `MYSQL_PASSWORD` y `MYSQL_ROOT_PASSWORD` en `.env` coincidan con lo que usa el proyecto
+- Revisa logs: `docker compose logs db` y `docker compose logs wordpress`
 
-1. Verifica que el contenedor de MySQL esté corriendo:
-   ```bash
-   docker-compose ps
-   ```
+### Nginx en bucle "Restarting"
 
-2. Verifica las variables de entorno en `docker-compose.yml` o `.env`
+- Revisa logs: `docker compose logs nginx`
+- Asegúrate de haber ejecutado `./scripts/setup.sh` antes de `docker compose up -d`
+- Valida la configuración: `docker compose exec nginx nginx -t`
 
-3. Revisa los logs:
-   ```bash
-   docker-compose logs db
-   docker-compose logs wordpress
-   ```
-
-### Error de permisos en WordPress
-
-```bash
-# Ajustar permisos en el contenedor
-docker-compose exec wordpress chown -R www-data:www-data /var/www/html
-docker-compose exec wordpress chmod -R 755 /var/www/html
-```
-
-### Puerto 80 o 443 ya en uso
+### Puerto 80 o 443 en uso
 
 En `.env` define otros puertos, por ejemplo:
 
@@ -443,41 +402,34 @@ HTTP_PORT=8080
 HTTPS_PORT=8443
 ```
 
-Luego `docker-compose up -d`.
+Luego: `./scripts/setup.sh` y `docker compose up -d`.
 
 ### Error al restaurar backup
 
-- Verifica que los archivos de backup existan en `backups/db/` y `backups/wp/`
-- Asegúrate de que el nombre del backup sea correcto
-- Revisa los logs: `docker-compose logs wordpress`
+- Comprueba que existan `backups/db/<nombre>.sql.gz` y `backups/wp/<nombre>.tar.gz`
+- El nombre que pasas a `./scripts/restore.sh` debe coincidir con el del backup (sin extensión)
 
-### Nginx en bucle "Restarting"
+### Permisos en WordPress
 
-Si el contenedor `wpdocker_wordpress_nginx` no arranca (status Restarting):
-
-1. **Comprueba que exista** `nginx/conf.d/00-default.conf` (va en el repo; si falta, copia del proyecto).
-2. **Revisa los logs** de Nginx:
-   ```bash
-   docker compose logs nginx
-   ```
-   Ahí suele aparecer el error de configuración (sintaxis, ruta, etc.).
-3. **Valida la configuración** dentro del contenedor:
-   ```bash
-   docker compose run --rm nginx nginx -t
-   ```
-4. Si despliegas sin ejecutar `setup.sh`, Nginx puede usar solo `00-default.conf` (funciona). Para usar tu dominio, ejecuta `./scripts/setup.sh` para generar `wordpress.conf`.
-
-## 📝 Notas Adicionales
-
-- Los volúmenes de Docker persisten los datos incluso si los contenedores se eliminan
-- Los backups son independientes de los volúmenes de Docker
-- Se recomienda hacer backups antes de actualizar WordPress o plugins
-- El proyecto está optimizado para entornos de desarrollo y producción pequeña/mediana
-
-## 📄 Licencia
-
-Este proyecto es una configuración personalizada para WordPress con Docker.
+```bash
+docker compose exec wordpress chown -R www-data:www-data /var/www/html
+docker compose exec wordpress chmod -R 755 /var/www/html
+```
 
 ---
 
-**¿Problemas o preguntas?** Revisa la sección de Solución de Problemas o consulta la documentación de [Docker](https://docs.docker.com/) y [WordPress](https://wordpress.org/support/).
+## 🔒 Seguridad
+
+- No subas `.env` a Git.
+- Cambia las contraseñas por defecto en producción.
+- Usa HTTPS en producción.
+- Mantén WordPress y plugins actualizados.
+- Haz backups antes de actualizaciones importantes.
+
+---
+
+## 📄 Licencia
+
+Configuración personalizada para WordPress con Docker.
+
+**¿Problemas?** Revisa la sección [Solución de problemas](#-solución-de-problemas) o la documentación de [Docker](https://docs.docker.com/) y [WordPress](https://wordpress.org/support/).

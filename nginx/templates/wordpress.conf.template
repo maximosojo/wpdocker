@@ -20,18 +20,24 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # Buffers aumentados para peticiones grandes y mejorar throughput (evitar 504)
-        proxy_buffer_size 32k;
-        proxy_buffers 8 64k;
-        proxy_busy_buffers_size 128k;
-        proxy_temp_file_write_size 128k;
+        # Buffers para evitar 502/504 con respuestas grandes o lentas
+        proxy_buffer_size 64k;
+        proxy_buffers 8 128k;
+        proxy_busy_buffers_size 256k;
+        proxy_temp_file_write_size 256k;
+        proxy_buffering on;
+        proxy_request_buffering on;
         
-        # Timeouts aumentados para evitar 504 Gateway Timeout (backend puede tardar bajo carga)
-        proxy_connect_timeout 90s;
-        proxy_send_timeout 120s;
-        proxy_read_timeout 120s;
+        # Timeouts muy altos para evitar 504 Gateway Timeout (backend PHP/MySQL puede tardar mucho)
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
         
-        # Keepalive para reducir overhead
+        # Reintentar si el backend devuelve 502/503 o timeout
+        proxy_next_upstream error timeout http_502 http_503;
+        proxy_next_upstream_tries 2;
+        proxy_next_upstream_timeout 120s;
+        
         proxy_http_version 1.1;
         proxy_set_header Connection "";
     }

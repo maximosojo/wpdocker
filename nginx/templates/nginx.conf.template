@@ -42,10 +42,10 @@ http {
     open_file_cache_min_uses 2;
     open_file_cache_errors on;
     
-    # Upstream con keepalive aumentado para mejor rendimiento
+    # Upstream: keepalive alto para evitar 502 por conexiones cerradas
     upstream wordpress {
         server wordpress:80;
-        keepalive 16;
+        keepalive 32;
     }
 
     # Configuración del servidor (HTTP y HTTPS)

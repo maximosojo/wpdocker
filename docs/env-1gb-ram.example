@@ -1,0 +1,38 @@
+# =============================================================================
+# Perfil para servidor 1 GB RAM + 2 CPU (con swap recomendado)
+# Copia este bloque a tu .env sustituyendo la sección de recursos.
+# Total contenedores: 740 MB (deja ~280 MB para sistema y picos).
+# =============================================================================
+
+# Nginx: 2 workers (1 por CPU), no más en 1 GB
+NGINX_WORKER_PROCESSES=2
+NGINX_WORKER_CONNECTIONS=512
+
+# PHP: 160M por petición (cabe en contenedor 300M)
+PHP_MEMORY_LIMIT=160M
+
+# Recursos Docker - ajustados para 1 GB
+DOCKER_MYSQL_CPU_LIMIT=0.8
+DOCKER_MYSQL_CPU_RESERVE=0.3
+DOCKER_MYSQL_MEMORY_LIMIT=360M
+DOCKER_MYSQL_MEMORY_RESERVE=144M
+
+DOCKER_WP_CPU_LIMIT=0.8
+DOCKER_WP_CPU_RESERVE=0.3
+DOCKER_WP_MEMORY_LIMIT=300M
+DOCKER_WP_MEMORY_RESERVE=120M
+
+DOCKER_NGINX_CPU_LIMIT=0.5
+DOCKER_NGINX_CPU_RESERVE=0.2
+DOCKER_NGINX_MEMORY_LIMIT=80M
+DOCKER_NGINX_MEMORY_RESERVE=40M
+
+# MySQL - no subir en 1 GB
+MYSQL_INNODB_BUFFER_POOL_SIZE=160M
+MYSQL_MAX_CONNECTIONS=30
+MYSQL_TMP_TABLE_SIZE=16M
+MYSQL_MAX_HEAP_TABLE_SIZE=16M
+
+# PHP
+PHP_MAX_EXECUTION_TIME=300
+PHP_MAX_INPUT_VARS=5000
