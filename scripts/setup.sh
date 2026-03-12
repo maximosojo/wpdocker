@@ -101,11 +101,13 @@ fi
 
 NGINX_WORKERS="${NGINX_WORKER_PROCESSES:-2}"
 NGINX_CONNS="${NGINX_WORKER_CONNECTIONS:-512}"
+NGINX_KEEPALIVE="${NGINX_UPSTREAM_KEEPALIVE:-64}"
 NGINX_OUTPUT="nginx/generated/nginx.conf"
 
 # Exportar variables para envsubst (si está disponible)
 export NGINX_WORKER_PROCESSES="$NGINX_WORKERS"
 export NGINX_WORKER_CONNECTIONS="$NGINX_CONNS"
+export NGINX_UPSTREAM_KEEPALIVE="$NGINX_KEEPALIVE"
 
 # Verificar que podemos escribir en el directorio
 if [ ! -w "nginx/generated" ]; then
@@ -119,17 +121,19 @@ rm -f "$NGINX_OUTPUT" 2>/dev/null || true
 
 if command -v envsubst >/dev/null 2>&1; then
   # Usar envsubst con las variables exportadas
-  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS' < nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
+  envsubst '\$NGINX_WORKER_PROCESSES \$NGINX_WORKER_CONNECTIONS \$NGINX_UPSTREAM_KEEPALIVE' < nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
   if [ $? -ne 0 ]; then
     echo -e "${YELLOW}envsubst falló, usando sed como respaldo${NC}"
     sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
         -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
+        -e "s/\${NGINX_UPSTREAM_KEEPALIVE}/${NGINX_KEEPALIVE}/g" \
         nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
   fi
 else
   # Usar sed como respaldo
   sed -e "s/\${NGINX_WORKER_PROCESSES}/${NGINX_WORKERS}/g" \
       -e "s/\${NGINX_WORKER_CONNECTIONS}/${NGINX_CONNS}/g" \
+      -e "s/\${NGINX_UPSTREAM_KEEPALIVE}/${NGINX_KEEPALIVE}/g" \
       nginx/templates/nginx.conf.template > "$NGINX_OUTPUT"
 fi
 
@@ -143,7 +147,7 @@ fi
 
 if [ -f "$NGINX_OUTPUT" ]; then
   chmod 644 "$NGINX_OUTPUT" 2>/dev/null || true
-  echo -e "${GREEN}✓ Generado $NGINX_OUTPUT (workers: ${NGINX_WORKERS}, connections: ${NGINX_CONNS})${NC}"
+  echo -e "${GREEN}✓ Generado $NGINX_OUTPUT (workers: ${NGINX_WORKERS}, connections: ${NGINX_CONNS}, keepalive: ${NGINX_KEEPALIVE})${NC}"
 else
   echo -e "${RED}✗ Error al generar $NGINX_OUTPUT (verifica permisos en nginx/generated/)${NC}"
   exit 1
@@ -217,14 +221,19 @@ case "$PHP_MEM" in
   *M) ;;
   *) PHP_MEM="${PHP_MEM}M" ;;
 esac
+PHP_MAX_EXEC="${PHP_MAX_EXECUTION_TIME:-300}"
+PHP_MAX_VARS="${PHP_MAX_INPUT_VARS:-5000}"
 PHP_OUTPUT="php-config/generated/memory.ini"
 cat > "$PHP_OUTPUT" << PHPINI
-; Generado por setup.sh - memory_limit desde .env (evitar 502/504 en servidores con poca RAM)
+; Generado por setup.sh desde .env (evitar 502/504 en servidores con poca RAM)
 memory_limit = $PHP_MEM
+max_execution_time = $PHP_MAX_EXEC
+max_input_time = $PHP_MAX_EXEC
+max_input_vars = $PHP_MAX_VARS
 PHPINI
 if [ -f "$PHP_OUTPUT" ]; then
   chmod 644 "$PHP_OUTPUT" 2>/dev/null || true
-  echo -e "${GREEN}✓ Generado $PHP_OUTPUT (memory_limit=$PHP_MEM)${NC}"
+  echo -e "${GREEN}✓ Generado $PHP_OUTPUT (memory_limit=$PHP_MEM, max_execution_time=$PHP_MAX_EXEC)${NC}"
 else
   echo -e "${RED}✗ Error al generar $PHP_OUTPUT (verifica permisos en php-config/generated/)${NC}"
   exit 1
