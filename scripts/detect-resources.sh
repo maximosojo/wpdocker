@@ -46,6 +46,15 @@ if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
   MYSQL_RESERVE_MB=$((MYSQL_MIN_MB * 40 / 100))
   WP_RESERVE_MB=$((WP_MIN_MB * 40 / 100))
   NGINX_RESERVE_MB=$((NGINX_MIN_MB * 50 / 100))
+elif [ "$RAM_MB" -ge 1800 ]; then
+  # Servidor ~2 GB: perfil estable (512+512+128) para evitar OOM y 502/504
+  AVAILABLE_RAM=$((RAM_MB * 60 / 100))
+  MYSQL_LIMIT_MB=512
+  WP_LIMIT_MB=512
+  NGINX_LIMIT_MB=128
+  MYSQL_RESERVE_MB=256
+  WP_RESERVE_MB=256
+  NGINX_RESERVE_MB=64
 elif [ "$RAM_MB" -lt 2048 ]; then
   # Servidor pequeño (1–2GB): dejar 40% libre, pero MySQL no bajar de 320M
   AVAILABLE_RAM=$((RAM_MB * 60 / 100))
@@ -136,6 +145,10 @@ if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
   INNODB_BUFFER_MB=160
   MYSQL_TMP_HEAP_MB=16
   MAX_CONNECTIONS=30
+elif [ "$RAM_MB" -ge 1800 ]; then
+  INNODB_BUFFER_MB=320
+  MYSQL_TMP_HEAP_MB=32
+  MAX_CONNECTIONS=50
 else
   if [ "$INNODB_BUFFER_MB" -lt 64 ]; then
     INNODB_BUFFER_MB=64
@@ -161,6 +174,8 @@ fi
 # o usar 128M para 2 peticiones. Con más RAM disponible, 160M mejora rendimiento.
 if [ "$RAM_MB" -lt "$MIN_RAM_SERVER_MB" ]; then
   PHP_MEMORY_MB=160
+elif [ "$RAM_MB" -ge 1800 ]; then
+  PHP_MEMORY_MB=256
 else
   PHP_MEMORY_MB=$((WP_LIMIT_MB * 60 / 100))
   if [ "$PHP_MEMORY_MB" -lt 128 ]; then

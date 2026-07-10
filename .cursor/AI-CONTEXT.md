@@ -8,7 +8,7 @@
 
 - **Qué es:** Stack WordPress en Docker con Nginx como proxy reverso, MySQL 8, scripts de backup/restore y tema hijo Astra.
 - **Objetivo:** Despliegue en servidores vacíos con mínima configuración: un solo `.env` y `./scripts/setup.sh` + `docker-compose up -d`. Todo el código es genérico y reutilizable.
-- **Optimización:** Detecta recursos del sistema (CPU/RAM) y ajusta límites dinámicamente. Optimizado para servidores pequeños (2 cores, 1GB RAM) para evitar errores 503.
+- **Optimización:** Detecta recursos del sistema (CPU/RAM) y ajusta límites dinámicamente. Perfil estable 2 GB: MySQL 512M, WordPress 512M, Nginx 128M (~1.15 GB total). Optimizado para servidores pequeños (2 cores, 1GB RAM) para evitar errores 502/504.
 - **Ruta del proyecto:** workspace raíz = `wpdocker` (donde está `docker-compose.yml`).
 
 ---
@@ -31,7 +31,9 @@ wpdocker/
 ├── .env.example             # Plantilla de variables (versionado)
 ├── .env                     # Configuración por entorno (no versionado; obligatorio)
 ├── docker-compose.yml       # Servicios: db, wordpress, nginx
-├── uploads.ini              # PHP: upload_max_filesize, memory_limit, etc. (montado en wordpress)
+├── uploads.ini              # PHP: upload_max_filesize, post_max_size, etc. (montado en wordpress)
+├── apache/
+│   └── mpm-prefork.conf     # Límite MaxRequestWorkers Apache (evita OOM en WP)
 ├── php-config/
 │   ├── opcache.ini          # OPcache optimizado (versionado)
 │   └── generated/           # Archivos generados desde .env (no versionado)
@@ -69,7 +71,7 @@ wpdocker/
 Los nombres de contenedores dependen de `COMPOSE_PROJECT_NAME` en `.env` (default: `wpdocker`):
 
 - **db:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_mysql` — MySQL 8, healthcheck, límites CPU/RAM dinámicos desde `.env` (`DOCKER_MYSQL_*`). Optimizaciones: `innodb_buffer_pool_size`, `max_connections`, `tmp_table_size` desde `.env`.
-- **wordpress:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app` — Depende de `db` healthy; recibe proxy desde nginx. Límites CPU/RAM desde `.env` (`DOCKER_WP_*`). PHP con OPcache y `memory_limit` optimizado.
+- **wordpress:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_app` — Depende de `db` healthy; recibe proxy desde nginx. Límites CPU/RAM desde `.env` (`DOCKER_WP_*`). PHP con OPcache y `memory_limit` optimizado. Apache con `MaxRequestWorkers=2` vía `apache/mpm-prefork.conf`.
 - **nginx:** `${COMPOSE_PROJECT_NAME:-wpdocker}_wordpress_nginx` — Puertos `HTTP_PORT`, `HTTPS_PORT` desde `.env`. Límites CPU/RAM desde `.env` (`DOCKER_NGINX_*`). Workers y conexiones desde `.env` (`NGINX_WORKER_*`).
 
 **Obligatorios en .env:** `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` (compose falla si faltan). `DOMAIN` obligatorio para `setup.sh`. Resto con defaults optimizados para servidor pequeño (2 cores, 1GB RAM) en `docker-compose.yml` y `.env.example`.
@@ -101,7 +103,7 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
 
 ## 7. PHP / WordPress
 
-- **uploads.ini:** Optimizado para recursos limitados: `upload_max_filesize` y `post_max_size` 64M, `memory_limit` 128M (ajustable con `PHP_MEMORY_LIMIT` en `.env`), `max_execution_time` y `max_input_time` 300, `max_input_vars` 5000, `realpath_cache_size` 2M.
+- **uploads.ini:** `upload_max_filesize` y `post_max_size` 64M (producción 2 GB). `memory_limit` en `php-config/generated/99-memory.ini` (desde `PHP_MEMORY_LIMIT` en `.env`). `max_execution_time` 300, `max_input_vars` 5000, `realpath_cache_size` 2M.
 - **opcache.ini:** OPcache habilitado con 64M de memoria, `max_accelerated_files` 10000, `revalidate_freq` 60s, `fast_shutdown` activado. Optimizado para reducir uso de memoria.
 - Tema hijo: **Astra Child** en `themes/astra-child` (style.css + functions.php encola estilos con dependencia de Astra).
 
@@ -142,7 +144,7 @@ Todos los scripts se ejecutan desde la **raíz del proyecto** y requieren `.env`
 1. **Backups:** Hacer backup antes de actualizar WordPress/plugins o antes de restauraciones.
 2. **Migraciones:** Backup con nombre descriptivo → copiar proyecto y `backups/` → en destino: crear `.env` (mismo dominio/credenciales o los del nuevo sitio) → `./scripts/setup.sh` → `docker-compose up -d` → si aplica, `./scripts/restore.sh <nombre>`.
 3. **Dominio:** Definir `DOMAIN` en `.env` y ejecutar `./scripts/setup.sh`; no editar archivos `.conf` generados a mano para no romper el flujo genérico.
-4. **Optimización de recursos:** En servidores nuevos, ejecutar `./scripts/detect-resources.sh` y copiar valores recomendados a `.env`. Si hay errores 503 o el servidor se cuelga, reducir límites de memoria (`DOCKER_*_MEMORY_LIMIT`) y CPU (`DOCKER_*_CPU_LIMIT`). Valores por defecto optimizados para 2 cores / 1GB RAM.
+4. **Optimización de recursos:** En servidores nuevos, ejecutar `./scripts/detect-resources.sh` y copiar valores recomendados a `.env`. Perfil estable 2 GB: ver `docs/env-2gb-ram.example`. Arrancar siempre con `./scripts/up.sh` (aplica `--compatibility`). Si hay errores 502/504, no subir límites de RAM; revisar OOM con `dmesg` y usar el perfil 512+512+128.
 5. **Debug:** En producción `WORDPRESS_DEBUG=false` en `.env`; en desarrollo se puede poner `true`.
 6. **Mantenimiento de este archivo:** Al añadir servicios, volúmenes, scripts, variables en `.env.example` o convenciones, actualizar las secciones correspondientes.
 

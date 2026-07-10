@@ -260,7 +260,7 @@ echo "  WordPress: CPU ${DOCKER_WP_CPU_LIMIT:-0.8} | RAM ${DOCKER_WP_MEMORY_LIMI
 echo "  Nginx:   CPU ${DOCKER_NGINX_CPU_LIMIT:-0.5} | RAM ${DOCKER_NGINX_MEMORY_LIMIT:-80M}"
 echo ""
 echo -e "${GREEN}Configuración lista. Para arrancar los servicios:${NC}"
-echo "  docker-compose up -d"
+echo "  ./scripts/up.sh"
 echo ""
 echo "Para ver logs: docker-compose logs -f"
 echo ""

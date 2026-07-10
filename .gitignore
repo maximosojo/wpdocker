@@ -34,3 +34,5 @@ php-config/generated/*
 # Logs
 *.log
 logs/
+
+*.old
