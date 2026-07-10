@@ -36,3 +36,5 @@ php-config/generated/*
 logs/
 
 *.old
+
+nginx/conf.d/00-default.conf
